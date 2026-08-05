@@ -589,9 +589,7 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .balance-label { font-size: 12px; font-weight: 600; letter-spacing: .14em; opacity: .78; }
 .balance-content h2 { margin: 20px 0 18px; font-size: clamp(52px, 5.4vw, 78px); font-weight: 300; }
 .balance-change { padding: 7px 11px; border-radius: 10px; font-weight: 600; }
-.balance-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; margin-top: 25px; }
-.balance-actions-row .quick-actions { margin-top: 0; }
-.quick-actions { justify-content: flex-start; gap: 10px; }
+.quick-actions { justify-content: flex-start; gap: 10px; margin-top: 25px; margin-left: -9px; }
 .quick-actions button { min-width: 74px; gap: 8px; }
 .quick-actions button > span {
   width: 56px;
@@ -599,7 +597,6 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   border-radius: 17px;
   color: #ff6f79;
   background: rgba(255, 255, 255, .035);
-  font-size: 8px;
 }
 .quick-actions strong { font-weight: 500; }
 .balance-chart { height: 175px; opacity: .78; }
@@ -667,7 +664,6 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   .balance-card { min-height: 490px; border-radius: 21px; }
   .balance-content { width: 100%; padding-top: 56px; }
   .balance-content h2 { font-size: clamp(48px, 12vw, 72px); }
-  .balance-actions-row { flex-wrap: wrap; gap: 14px; }
   .quick-actions { width: min(100%, 360px); gap: 14px; justify-content: center; }
   .quick-actions button { min-width: 60px; }
   .quick-actions button > span { width: 51px; height: 51px; }
@@ -694,8 +690,7 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   .balance-card { min-height: 455px; }
   .balance-content { align-content: start; justify-items: center; padding: 43px 10px 110px; text-align: center; }
   .balance-content h2 { font-size: 46px; }
-  .balance-actions-row { flex-direction: column; align-items: center; gap: 16px; }
-  .quick-actions { gap: 8px; }
+  .quick-actions { margin-top: 16px; gap: 8px; }
   .quick-actions button > span { width: 46px; height: 46px; }
   .quick-actions strong { font-size: 12px; }
   .period-switcher { right: auto; left: 50%; bottom: 42px; transform: translateX(-50%); }

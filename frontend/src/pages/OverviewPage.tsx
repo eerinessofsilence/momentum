@@ -58,39 +58,37 @@ export function OverviewPage() {
             <div className="balance-content">
               <span className="balance-label">Total portfolio value</span>
               <h2>{money(data.total_balance)}</h2>
-              <div className="balance-actions-row">
-                <span
-                  className={`balance-change ${Number(data.periods[period].change) >= 0 ? "positive" : "negative"}`}
-                  aria-live="polite">
-                  {Number(data.periods[period].change) >= 0 ? "↑" : "↓"}{" "}
-                  {Math.abs(Number(data.periods[period].change)).toFixed(2)}% · {period}
-                </span>
-                <div className="quick-actions">
-                  <button onClick={() => openAction("receive")}>
-                    <span>
-                      <ArrowDownToLine />
-                    </span>
-                    <strong>Receive</strong>
-                  </button>
-                  <button onClick={() => openAction("send")}>
-                    <span>
-                      <ArrowUpRight />
-                    </span>
-                    <strong>Send</strong>
-                  </button>
-                  <button onClick={() => openAction("buy")}>
-                    <span>
-                      <CircleDollarSign />
-                    </span>
-                    <strong>Buy</strong>
-                  </button>
-                  <button onClick={() => openAction("swap")}>
-                    <span>
-                      <RefreshCw />
-                    </span>
-                    <strong>Swap</strong>
-                  </button>
-                </div>
+              <span
+                className={`balance-change ${Number(data.periods[period].change) >= 0 ? "positive" : "negative"}`}
+                aria-live="polite">
+                {Number(data.periods[period].change) >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(Number(data.periods[period].change)).toFixed(2)}% · {period}
+              </span>
+              <div className="quick-actions">
+                <button onClick={() => openAction("receive")}>
+                  <span>
+                    <ArrowDownToLine size={24} />
+                  </span>
+                  <strong>Receive</strong>
+                </button>
+                <button onClick={() => openAction("send")}>
+                  <span>
+                    <ArrowUpRight size={24} />
+                  </span>
+                  <strong>Send</strong>
+                </button>
+                <button onClick={() => openAction("buy")}>
+                  <span>
+                    <CircleDollarSign size={24} />
+                  </span>
+                  <strong>Buy</strong>
+                </button>
+                <button onClick={() => openAction("swap")}>
+                  <span>
+                    <RefreshCw size={24} />
+                  </span>
+                  <strong>Swap</strong>
+                </button>
               </div>
             </div>
             <BalanceChart key={period} values={data.periods[period].values} />
