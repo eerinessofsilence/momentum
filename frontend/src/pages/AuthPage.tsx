@@ -1,0 +1,161 @@
+import { Pulse as Activity, Clock as Clock3, ShieldCheck } from "@phosphor-icons/react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useAuth } from "../AuthContext";
+import { Brand } from "../components/Brand";
+import { navigate } from "../router";
+
+export function AuthPage() {
+  const { user, login, register } = useAuth();
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("demo");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("Momentum123!");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate(user.is_staff ? "/staff" : "/app/overview", true);
+  }, [user]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      if (mode === "login") await login(username, password);
+      else await register({ name, username, email, password });
+      // The auth state effect sends staff and clients to their respective workspace.
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="auth-page">
+      <section className="auth-hero">
+        <div className="auth-orb orb-one" />
+        <div className="auth-orb orb-two" />
+        <div className="auth-brand">
+          <Brand />
+        </div>
+        <div className="auth-copy">
+          <h1>The wallet that keeps your future in motion.</h1>
+          <p>Move, swap, and manage your portfolio through a secure multi-chain experience.</p>
+          <div className="hero-features">
+            <span>
+              <ShieldCheck /> Advanced security at every step.
+            </span>
+            <span>
+              <Activity /> Four chains supported — BTC, ETH, USDT, TON.
+            </span>
+            <span>
+              <Clock3 /> Momentum Support — replies in seconds.
+            </span>
+          </div>
+        </div>
+        <p className="auth-footer">© 2026 Momentum Labs · v1.0.0</p>
+      </section>
+      <section className="auth-form-panel">
+        <div className="auth-form-wrap">
+          <div className="auth-tabs" role="tablist">
+            <button
+              className={mode === "login" ? "active" : ""}
+              onClick={() => {
+                setMode("login");
+                setError("");
+              }}
+              role="tab"
+              aria-selected={mode === "login"}>
+              Sign in
+            </button>
+            <button
+              className={mode === "register" ? "active" : ""}
+              onClick={() => {
+                setMode("register");
+                setError("");
+              }}
+              role="tab"
+              aria-selected={mode === "register"}>
+              Create account
+            </button>
+          </div>
+          <div className="auth-title">
+            <h2>{mode === "login" ? "Welcome back" : "Create your wallet"}</h2>
+            <p>
+              {mode === "login"
+                ? "Sign in to access your Momentum workspace."
+                : "Create your account and set up your wallet profile."}
+            </p>
+          </div>
+          <form className="auth-form" onSubmit={submit}>
+            {mode === "register" && (
+              <label className="field-label">
+                Name
+                <input
+                  className="field-input"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Alex Morgan"
+                  autoComplete="name"
+                  required
+                />
+              </label>
+            )}
+            <label className="field-label">
+              Username{mode === "login" && " or email"}
+              <input
+                className="field-input"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Your username..."
+                autoComplete="username"
+                required
+              />
+            </label>
+            {mode === "register" && (
+              <label className="field-label">
+                Email
+                <input
+                  className="field-input"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
+              </label>
+            )}
+            <label className="field-label">
+              Password
+              <input
+                className="field-input"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Your password..."
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                minLength={mode === "register" ? 8 : 1}
+                required
+              />
+            </label>
+            {error && (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            )}
+            <button className="button primary auth-submit" disabled={busy}>
+              {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create wallet"}
+            </button>
+          </form>
+          <p className="auth-help">
+            New to Momentum? <button onClick={() => setMode("register")}>Create an account</button>
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
