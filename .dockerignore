@@ -1,0 +1,16 @@
+.git
+.env
+.env.local
+**/node_modules
+**/dist
+**/.vite
+backend/.venv
+**/__pycache__
+backend/.pytest_cache
+backend/.ruff_cache
+backend/uploads/*
+!backend/uploads/.gitkeep
+**/*.pyc
+**/*.sqlite3
+**/*.tsbuildinfo
+.coverage
