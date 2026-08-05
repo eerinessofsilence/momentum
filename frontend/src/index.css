@@ -515,7 +515,62 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .app-loader p { margin: 0; font-size: 14px; }
 @keyframes pulse { 50% { transform: scale(1.05); } }
 
-/* Soft editorial system inspired by the supplied dashboard references */
+/* =====================================================================
+   Shape & type layer, tuned against the reference dashboards.
+   Only radii, control shapes, font sizes and weights live here —
+   colours, layout and interaction stay as they were.
+   ===================================================================== */
+
+:root {
+  /* Radius scale. Nesting rule: inner radius = outer radius − padding,
+     which keeps nested corners concentric instead of drifting apart. */
+  --r-chip: 9px;
+  --r-control-sm: 12px;
+  --r-control: 16px;
+  --r-row: 14px;
+  --r-panel: 26px;
+  --r-card: 32px;
+}
+
+/* Corner smoothing. border-radius sweeps a circular arc that meets the
+   straight edge abruptly; corner-shape: squircle sweeps a superellipse,
+   so the curvature ramps in gradually — the continuous corner of the
+   third reference. Chromium 139+ applies it, every other engine keeps the
+   plain rounded corner, so this stays purely additive. Circles (avatars,
+   coin marks, toggles) are deliberately left out. */
+@supports (corner-shape: squircle) {
+  .sidebar, .balance-card, .panel-card, .support-card, .modal-card,
+  .loading-panel, .staff-workspace, .staff-section-card, .staff-chat-panel,
+  .client-list-panel, .client-detail-panel, .staff-sidebar-note, .staff-live,
+  .button, .icon-button, .nav-item, .profile-card, .signout-button,
+  .field-input, .custom-select-trigger, .custom-select-menu,
+  .custom-select-option, .auth-tabs, .auth-tabs button, .inline-tabs,
+  .inline-tabs button, .segmented-control, .segmented-control button,
+  .staff-segmented, .staff-segmented button, .method-card, .contact-card,
+  .asset-highlight, .address-copy, .info-panel, .development-code,
+  .hash-input, .form-error, .success-inline, .staff-search, .staff-toast,
+  .composer-row > input, .attach-button, .composer-send, .qr-shell,
+  .staff-chat-composer textarea, .transaction-icon, .method-icon, .kpi-icon,
+  .activity-icon, .loader-mark, .staff-avatar, .staff-workspace-label,
+  .quick-actions button > span, .balance-change, .change-chip, .status-chip,
+  .status-pill, .neutral-pill, .wallet-row.compact, .transaction-row.compact,
+  .client-list > button, .chat-bubble, .staff-chat-row > div,
+  .code-list > button, .codes-empty, .staff-kpis article, .adjust-warning,
+  .staff-adjust-client, .amount-field .field-input,
+  .period-switcher, .period-switcher button {
+    corner-shape: squircle;
+  }
+}
+
+/* --- Global type ------------------------------------------------------ */
+body { letter-spacing: -.01em; }
+h1, h2, h3, .font-heading { font-weight: 500; letter-spacing: -.035em; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .16em; }
+.field-label { font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.field-label small, .label-hint { font-size: 12px; font-weight: 500; }
+.fine-print, .modal-copy, .settings-copy, .empty-state { font-size: 14px; letter-spacing: -.005em; }
+
+/* --- Shell ------------------------------------------------------------ */
 .app-shell {
   background:
     radial-gradient(circle at 88% 4%, rgba(237, 74, 87, .08), transparent 28%),
@@ -526,7 +581,7 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   width: 252px;
   padding: 24px 16px 18px;
   border: 1px solid var(--line);
-  border-radius: 30px;
+  border-radius: var(--r-card);
   box-shadow: 0 24px 65px rgba(0, 0, 0, .18);
 }
 .sidebar-top { padding: 0 10px 22px; }
@@ -537,7 +592,8 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .nav-item {
   min-height: 52px;
   padding: 0 16px;
-  border-radius: 17px;
+  border-radius: var(--r-control);
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: -.01em;
 }
@@ -547,17 +603,22 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   background: linear-gradient(110deg, rgba(237, 74, 87, .18), rgba(237, 74, 87, .055));
   box-shadow: inset 0 1px rgba(255, 255, 255, .035);
 }
-.profile-card, .signout-button { border-radius: 17px; }
+.nav-badge { font-size: 11px; font-weight: 600; letter-spacing: 0; }
+.icon-button { border-radius: var(--r-control-sm); }
+.profile-card, .signout-button { border-radius: var(--r-control); }
 .profile-card { background: color-mix(in srgb, var(--panel-raised) 78%, transparent); }
+.profile-card strong { font-weight: 600; }
+.signout-button { font-size: 14px; font-weight: 500; }
 .app-main { margin-left: 270px; }
 .page-content { padding: 35px 38px 60px; }
 .page-heading { min-height: 72px; margin-bottom: 18px; align-items: center; }
 .page-heading h1 { margin-bottom: 7px; font-size: 30px; font-weight: 400; letter-spacing: -.045em; }
-.page-heading p { font-weight: 400; }
+.page-heading p { font-weight: 400; letter-spacing: -.005em; }
 
+/* --- Hero balance card ------------------------------------------------- */
 .balance-card {
   min-height: 445px;
-  border-radius: 32px;
+  border-radius: var(--r-card);
   background:
     radial-gradient(circle at 82% 18%, rgba(255, 136, 145, .22), transparent 30%),
     linear-gradient(118deg, color-mix(in srgb, var(--panel-raised) 92%, #42141a), var(--panel));
@@ -586,48 +647,98 @@ input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
   padding: 58px 54px 120px;
   text-align: left;
 }
-.balance-label { font-size: 12px; font-weight: 600; letter-spacing: .14em; opacity: .78; }
-.balance-content h2 { margin: 20px 0 18px; font-size: clamp(52px, 5.4vw, 78px); font-weight: 300; }
-.balance-change { padding: 7px 11px; border-radius: 10px; font-weight: 600; }
+.balance-label { font-size: 12px; font-weight: 600; letter-spacing: .15em; opacity: .78; }
+.balance-content h2 { margin: 20px 0 18px; font-size: clamp(52px, 5.4vw, 78px); font-weight: 300; letter-spacing: -.055em; }
+.balance-change { padding: 7px 12px; border-radius: var(--r-chip); font-size: 13px; font-weight: 600; letter-spacing: -.005em; }
 .quick-actions { justify-content: flex-start; gap: 10px; margin-top: 25px; margin-left: -9px; }
 .quick-actions button { min-width: 74px; gap: 8px; }
 .quick-actions button > span {
   width: 56px;
   height: 48px;
-  border-radius: 17px;
+  border-radius: var(--r-control);
   color: #ff6f79;
   background: rgba(255, 255, 255, .035);
 }
-.quick-actions strong { font-weight: 500; }
+.quick-actions strong { font-size: 13px; font-weight: 500; }
 .balance-chart { height: 175px; opacity: .78; }
-.period-switcher { left: auto; right: 30px; bottom: 28px; transform: none; border-radius: 16px; }
-.period-switcher button { border-radius: 12px; font-weight: 600; }
+.period-switcher { left: auto; right: 30px; bottom: 28px; transform: none; border-radius: var(--r-control); }
+.period-switcher button { border-radius: 11px; font-size: 12px; font-weight: 600; letter-spacing: 0; }
 .period-switcher button.active { background: color-mix(in srgb, var(--red) 82%, #8d2a34); }
 
+/* --- Panels and rows ---------------------------------------------------- */
 .overview-grid { gap: 18px; margin-top: 18px; }
-.panel-card { border-radius: 24px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 18px 50px rgba(0, 0, 0, .12); }
+.panel-card { border-radius: var(--r-panel); background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 18px 50px rgba(0, 0, 0, .12); }
+.loading-panel { border-radius: var(--r-panel); }
 .panel-heading { min-height: 70px; padding: 0 25px; }
-.panel-heading h2 { font-size: 17px; font-weight: 500; }
-.panel-heading a { font-weight: 600; }
-.panel-list { padding: 0 13px 13px; }
-.wallet-row.compact, .transaction-row.compact { border-radius: 17px; }
+.panel-heading h2 { font-size: 19px; font-weight: 500; letter-spacing: -.035em; }
+.panel-heading > span { font-size: 13px; font-weight: 400; }
+.panel-heading a { font-size: 14px; font-weight: 600; }
+.panel-list { padding: 0 12px 12px; }
+.wallet-row.compact, .transaction-row.compact { border-radius: var(--r-row); }
 .wallet-row.compact:hover, .transaction-row.compact:hover { background: var(--panel-raised); }
-.transaction-icon { border-radius: 14px; }
-.change-chip, .status-chip { border-radius: 9px; font-weight: 600; letter-spacing: .02em; }
-.button, .field-input, .custom-select-trigger { border-radius: 16px; }
-.button { font-weight: 600; }
-.button.small { border-radius: 13px; }
-.auth-tabs, .custom-select-menu, .asset-highlight, .method-card, .info-panel, .address-copy, .development-code { border-radius: 18px; }
-.auth-tabs button, .custom-select-option { border-radius: 13px; }
-.wallet-page-card, .history-card, .settings-card, .support-card { overflow: hidden; }
-.modal-card { border-radius: 28px; }
+.wallet-identity strong, .wallet-numbers strong,
+.transaction-title strong, .transaction-amount strong { font-size: 14px; font-weight: 600; letter-spacing: -.015em; }
+.wallet-identity span, .wallet-numbers span,
+.transaction-amount span, .transaction-title small { font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.transaction-icon { border-radius: var(--r-row); }
+.inline-tabs { border-radius: var(--r-control); }
+.inline-tabs button { border-radius: var(--r-control-sm); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+
+/* --- Tags, chips, badges ------------------------------------------------ */
+.change-chip, .status-chip {
+  padding: 6px 10px;
+  border-radius: var(--r-chip);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: capitalize;
+}
+.status-chip { padding: 5px 10px; }
+.status-pill, .neutral-pill { padding: 5px 9px; border-radius: var(--r-chip); font-size: 10px; font-weight: 600; letter-spacing: 0; }
+.staff-workspace-label { border-radius: var(--r-control-sm); font-size: 11px; font-weight: 600; letter-spacing: .1em; }
+
+/* --- Buttons and form controls ------------------------------------------ */
+.button { padding: 0 20px; border-radius: var(--r-control); font-size: 14px; font-weight: 600; letter-spacing: -.005em; }
+.button.small { min-height: 38px; padding: 0 15px; border-radius: var(--r-control-sm); font-size: 13px; }
+.field-input, .custom-select-trigger { border-radius: var(--r-control); font-size: 14px; font-weight: 500; }
+.custom-select-menu { border-radius: 18px; }
+.custom-select-option { border-radius: var(--r-control-sm); font-size: 14px; }
+.auth-tabs { border-radius: var(--r-control); }
+.auth-tabs button { border-radius: 11px; font-size: 14px; font-weight: 600; }
+.auth-copy h1 { font-weight: 400; }
+.auth-title h2 { font-weight: 400; letter-spacing: -.05em; }
+.auth-help, .auth-footer { letter-spacing: -.005em; }
+.auth-help button { font-weight: 600; }
+.segmented-control, .staff-segmented { border-radius: var(--r-control-sm); }
+.segmented-control button { border-radius: 9px; font-size: 12px; font-weight: 500; }
+.staff-segmented button { border-radius: 8px; font-weight: 600; }
+.composer-row > input, .attach-button, .composer-send, .hash-input { border-radius: var(--r-control); }
+.staff-search, .code-controls input { border-radius: var(--r-control-sm); }
+
+/* --- Overlays, chat, moderator workspace --------------------------------- */
+.modal-card { border-radius: var(--r-card); }
 .modal-header { min-height: 78px; }
-.contact-card { border-radius: 19px; }
-.support-card { border-radius: 28px; }
-.chat-bubble { border-radius: 20px 20px 20px 6px; }
-.chat-row.client .chat-bubble { border-radius: 20px 20px 6px 20px; }
-.inline-tabs { border-radius: 16px; }
-.inline-tabs button { border-radius: 12px; }
+.modal-header h2 { font-size: 19px; font-weight: 500; letter-spacing: -.035em; }
+.asset-highlight, .method-card, .info-panel, .address-copy,
+.development-code, .contact-card { border-radius: 18px; }
+.method-icon, .kpi-icon, .activity-icon { border-radius: var(--r-row); }
+.method-card strong, .contact-card strong, .info-panel strong,
+.asset-highlight strong, .setting-row strong { font-weight: 600; }
+.wallet-page-card, .history-card, .settings-card, .support-card { overflow: hidden; }
+.support-card { border-radius: var(--r-card); }
+.chat-bubble { border-radius: 22px 22px 22px 7px; }
+.chat-row.user .chat-bubble { border-radius: 22px 22px 7px 22px; }
+.chat-bubble p { font-size: 14px; letter-spacing: -.005em; }
+.settings-section > h2 { font-size: 12px; font-weight: 600; letter-spacing: .12em; }
+.loader-mark { border-radius: var(--r-control); }
+.staff-page-heading h1 { font-weight: 400; letter-spacing: -.045em; }
+.staff-workspace { border-radius: var(--r-panel); }
+.staff-section-card, .staff-chat-panel { border-radius: 18px; }
+.staff-kpis article { border-radius: var(--r-control); }
+.staff-section-title h3 { font-size: 14px; font-weight: 500; }
+.staff-navigation a, .staff-navigation button { border-radius: var(--r-control-sm); font-weight: 500; }
+.staff-chat-row > div { border-radius: 16px 16px 16px 5px; }
+.staff-chat-row.support > div { border-radius: 16px 16px 5px 16px; }
 
 @media (max-width: 1180px) {
   .overview-grid { grid-template-columns: 1fr; }
