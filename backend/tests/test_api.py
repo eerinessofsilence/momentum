@@ -155,3 +155,68 @@ def test_staff_workspace_is_role_protected_and_operational(client):
         f"/api/staff/clients/{target['id']}/messages",
         json={"body": "We reviewed your account and the transfer is now confirmed."},
     ).status_code == 201
+
+
+def test_managed_profile_and_persistent_multi_code_transfer(client):
+    client.post(
+        "/api/auth/login",
+        json={"username": "moderator", "password": "MomentumAdmin123!"},
+    )
+    created = client.post(
+        "/api/staff/clients",
+        json={
+            "profile_label": "Olena campaign 1",
+            "name": "Olena",
+            "username": "olena_managed_1",
+            "email": "olena.managed.1@example.com",
+            "required_codes": 2,
+        },
+    )
+    assert created.status_code == 201
+    payload = created.json()
+    assert payload["client"]["profile_label"] == "Olena campaign 1"
+    assert payload["client"]["verification_required"] == 2
+    assert len(payload["client"]["codes"]) == 2
+    assert "temporary_password" in payload
+
+    search = client.get("/api/staff/clients?query=campaign%201").json()["items"]
+    assert [item["id"] for item in search] == [payload["client"]["id"]]
+    search_by_id = client.get(f"/api/staff/clients?query={payload['client']['id']}").json()["items"]
+    assert any(item["id"] == payload["client"]["id"] for item in search_by_id)
+
+    reset = client.post(
+        f"/api/staff/clients/{payload['client']['id']}/reset-password"
+    )
+    assert reset.status_code == 200
+    new_password = reset.json()["temporary_password"]
+    assert new_password != payload["temporary_password"]
+
+    login = client.post(
+        "/api/auth/login", json={"username": "olena_managed_1", "password": new_password}
+    )
+    assert login.status_code == 200
+    transfer = client.post(
+        "/api/demo/transfers",
+        json={"method": "crypto", "asset": "USDT", "amount": "1", "destination": "demo_address_123"},
+    )
+    assert transfer.status_code == 201
+    transfer_id = transfer.json()["transfer"]["id"]
+    codes = sorted(payload["client"]["codes"], key=lambda item: item["id"])
+
+    first = client.post(
+        f"/api/demo/transfers/{transfer_id}/codes", json={"code": codes[0]["code"]}
+    )
+    assert first.status_code == 200
+    assert first.json()["transfer"]["status"] == "verification"
+    assert first.json()["transfer"]["used_codes"] == 1
+
+    second = client.post(
+        f"/api/demo/transfers/{transfer_id}/codes", json={"code": codes[1]["code"]}
+    )
+    assert second.status_code == 200
+    assert second.json()["transfer"]["status"] == "processing"
+    assert second.json()["transfer"]["processing_until"] is not None
+    assert second.json()["transfer"]["processing_until"].endswith("Z")
+    status_payload = client.get("/api/verification/status").json()
+    assert status_payload["state"] == "processing"
+    assert status_payload["used"] == 2

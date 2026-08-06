@@ -9,6 +9,8 @@ export type User = {
   theme: Theme
   sounds: boolean
   is_staff: boolean
+  profile_label: string | null
+  verification: VerificationStatus
 }
 
 export type Wallet = {
@@ -57,6 +59,7 @@ export type ActionKind = 'receive' | 'send' | 'buy' | 'swap'
 export type StaffClientSummary = {
   id: number
   name: string
+  profile_label: string
   username: string
   email: string
   created_at: string
@@ -64,6 +67,10 @@ export type StaffClientSummary = {
   transaction_count: number
   needs_reply: boolean
   last_message_at: string | null
+  verification_state: VerificationState
+  verification_required: number
+  verification_used: number
+  processing_until: string | null
 }
 
 export type ConfirmationCode = {
@@ -78,4 +85,27 @@ export type StaffClient = StaffClientSummary & {
   transactions: Transaction[]
   messages: SupportMessage[]
   codes: ConfirmationCode[]
+}
+
+export type VerificationState = 'locked' | 'verification' | 'processing' | 'completed'
+
+export type VerificationStatus = {
+  state: VerificationState
+  required: number
+  used: number
+  processing_until: string | null
+  active_transfer_id?: number | null
+}
+
+export type DemoTransfer = {
+  id: number
+  method: 'card' | 'crypto'
+  asset: string
+  amount: string
+  destination: string
+  status: 'verification' | 'processing' | 'completed'
+  required_codes: number
+  used_codes: number
+  processing_until: string | null
+  created_at: string
 }

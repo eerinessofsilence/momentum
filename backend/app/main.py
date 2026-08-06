@@ -11,7 +11,7 @@ from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, Upl
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from .models import (
     ConfirmationCode,
+    DemoTransfer,
     Preference,
     Session,
     SupportAttachment,
@@ -32,13 +33,17 @@ from .models import (
 from .schemas import (
     AuthorizeWithdrawalInput,
     BuyInput,
+    DemoCodeInput,
+    DemoTransferInput,
     LoginInput,
     PreferenceInput,
     RegisterInput,
     SendInput,
     SupportMessageInput,
     StaffBalanceInput,
+    StaffClientCreateInput,
     StaffCodeInput,
+    StaffVerificationInput,
     SwapInput,
     VerifyWithdrawalInput,
     WithdrawalInput,
@@ -47,6 +52,7 @@ from .security import (
     hash_password,
     make_otp,
     make_session_token,
+    make_temporary_password,
     token_hash,
     verify_password,
 )
@@ -60,8 +66,13 @@ MONEY_EPSILON = Decimal("0.00000001")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    # Tests use disposable SQLite databases and need their schema initialized.
+    # PostgreSQL is persistent and must be changed exclusively through Alembic;
+    # create_all() can create new tables but cannot upgrade existing ones, which
+    # otherwise leaves a partially-upgraded schema before migrations run.
+    if engine.dialect.name == "sqlite":
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
     async with SessionLocal() as session:
         await seed_demo_user(session)
         await seed_staff_workspace(session)
@@ -87,6 +98,10 @@ def as_decimal(value: Decimal | str | int | float) -> Decimal:
     return Decimal(str(value))
 
 
+def utc_iso(value: datetime | None) -> str | None:
+    return f"{value.isoformat()}Z" if value is not None else None
+
+
 def require_asset(asset: str) -> str:
     normalized = asset.upper()
     if normalized not in SUPPORTED_ASSETS:
@@ -104,6 +119,13 @@ def serialize_user(user: User, preference: Preference | None = None) -> dict:
         "theme": preference.theme if preference else "dark",
         "sounds": preference.sounds if preference else True,
         "is_staff": user.is_staff,
+        "profile_label": user.profile_label,
+        "verification": {
+            "state": user.verification_state,
+            "required": user.verification_target,
+            "used": user.verification_used,
+            "processing_until": utc_iso(user.processing_until),
+        },
     }
 
 
@@ -135,6 +157,73 @@ def serialize_transaction(transaction: Transaction) -> dict:
         "details": transaction.details or {},
         "created_at": transaction.created_at,
     }
+
+
+def serialize_demo_transfer(item: DemoTransfer) -> dict:
+    return {
+        "id": item.id,
+        "method": item.method,
+        "asset": item.asset,
+        "amount": str(as_decimal(item.amount).normalize()),
+        "destination": item.destination,
+        "status": item.status,
+        "required_codes": item.required_codes,
+        "used_codes": item.used_codes,
+        "processing_until": utc_iso(item.processing_until),
+        "created_at": item.created_at,
+    }
+
+
+async def refresh_demo_transfer(
+    db: AsyncSession, user: User, transfer: DemoTransfer
+) -> DemoTransfer:
+    if (
+        transfer.status == "processing"
+        and transfer.processing_until is not None
+        and transfer.processing_until <= now()
+    ):
+        transfer.status = "completed"
+        user.verification_state = "completed"
+        user.processing_until = None
+        if transfer.transaction_id:
+            transaction = await db.get(Transaction, transfer.transaction_id)
+            if transaction:
+                transaction.status = "approved"
+        await db.commit()
+    return transfer
+
+
+async def begin_demo_processing(
+    db: AsyncSession, user: User, transfer: DemoTransfer
+) -> None:
+    wallet = await owned_wallet(db, user.id, transfer.asset, lock=True)
+    amount = as_decimal(transfer.amount)
+    if as_decimal(wallet.balance) < amount:
+        raise HTTPException(status_code=422, detail="Insufficient balance")
+    wallet.balance = as_decimal(wallet.balance) - amount
+    processing_until = now() + timedelta(hours=24)
+    transfer.status = "processing"
+    transfer.processing_until = processing_until
+    user.verification_state = "processing"
+    user.processing_until = processing_until
+    title = (
+        f"Demo card transfer ···· {transfer.destination}"
+        if transfer.method == "card"
+        else f"Demo crypto transfer to {transfer.destination[:12]}…"
+    )
+    transaction = Transaction(
+        user_id=user.id,
+        kind="withdrawal" if transfer.method == "card" else "send",
+        status="pending",
+        asset=transfer.asset,
+        amount=-amount,
+        usd_value=(amount * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
+        title=title,
+        details={"method": transfer.method, "environment": "development"},
+    )
+    db.add(transaction)
+    await db.flush()
+    transfer.transaction_id = transaction.id
 
 
 async def current_user(
@@ -512,6 +601,159 @@ async def demo_send(
     return {"transaction": serialize_transaction(transaction), "wallet": serialize_wallet(wallet)}
 
 
+@app.post("/api/demo/transfers", status_code=201)
+async def create_demo_transfer(
+    payload: DemoTransferInput,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    existing = await db.scalar(
+        select(DemoTransfer)
+        .where(
+            DemoTransfer.user_id == user.id,
+            DemoTransfer.status.in_(("verification", "processing")),
+        )
+        .order_by(DemoTransfer.id.desc())
+    )
+    if existing:
+        await refresh_demo_transfer(db, user, existing)
+        if existing.status != "completed":
+            raise HTTPException(status_code=409, detail="Finish the active demo transfer first")
+    if (
+        user.verification_target > 0
+        and user.verification_used >= user.verification_target
+        and user.verification_state == "completed"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The completed code requirement must be reset by a moderator",
+        )
+
+    symbol = require_asset(payload.asset)
+    wallet = await owned_wallet(db, user.id, symbol)
+    amount = as_decimal(payload.amount)
+    if as_decimal(wallet.balance) < amount:
+        raise HTTPException(status_code=422, detail="Insufficient balance")
+    transfer = DemoTransfer(
+        user_id=user.id,
+        method=payload.method,
+        asset=symbol,
+        amount=amount,
+        destination=payload.destination.strip(),
+        status="verification",
+        required_codes=user.verification_target,
+        used_codes=user.verification_used,
+    )
+    db.add(transfer)
+    user.verification_state = "verification"
+    user.processing_until = None
+    await db.flush()
+    if transfer.used_codes >= transfer.required_codes:
+        await begin_demo_processing(db, user, transfer)
+    await db.commit()
+    await db.refresh(transfer)
+    return {"transfer": serialize_demo_transfer(transfer)}
+
+
+@app.get("/api/demo/transfers/active")
+async def active_demo_transfer(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
+    transfer = await db.scalar(
+        select(DemoTransfer)
+        .where(
+            DemoTransfer.user_id == user.id,
+            DemoTransfer.status.in_(("verification", "processing")),
+        )
+        .order_by(DemoTransfer.id.desc())
+    )
+    if not transfer:
+        return {"transfer": None}
+    await refresh_demo_transfer(db, user, transfer)
+    if transfer.status == "completed":
+        return {"transfer": None}
+    return {"transfer": serialize_demo_transfer(transfer)}
+
+
+@app.get("/api/demo/transfers/{transfer_id}")
+async def demo_transfer_status(
+    transfer_id: int,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    transfer = await db.scalar(
+        select(DemoTransfer).where(
+            DemoTransfer.id == transfer_id, DemoTransfer.user_id == user.id
+        )
+    )
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Demo transfer not found")
+    await refresh_demo_transfer(db, user, transfer)
+    return {"transfer": serialize_demo_transfer(transfer)}
+
+
+@app.post("/api/demo/transfers/{transfer_id}/codes")
+async def submit_demo_transfer_code(
+    transfer_id: int,
+    payload: DemoCodeInput,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    transfer = await db.scalar(
+        select(DemoTransfer)
+        .where(DemoTransfer.id == transfer_id, DemoTransfer.user_id == user.id)
+        .with_for_update()
+    )
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Demo transfer not found")
+    if transfer.status != "verification":
+        raise HTTPException(status_code=409, detail="Transfer is not awaiting codes")
+    next_code = await db.scalar(
+        select(ConfirmationCode)
+        .where(
+            ConfirmationCode.user_id == user.id,
+            ConfirmationCode.status == "ready",
+        )
+        .order_by(ConfirmationCode.created_at, ConfirmationCode.id)
+        .with_for_update()
+    )
+    if not next_code:
+        raise HTTPException(status_code=409, detail="No confirmation codes are available")
+    if not secrets.compare_digest(next_code.code, payload.code):
+        raise HTTPException(status_code=422, detail="Enter the next confirmation code")
+    next_code.status = "used"
+    transfer.used_codes += 1
+    user.verification_used += 1
+    if transfer.used_codes >= transfer.required_codes:
+        await begin_demo_processing(db, user, transfer)
+    await db.commit()
+    await db.refresh(transfer)
+    return {"transfer": serialize_demo_transfer(transfer)}
+
+
+@app.get("/api/verification/status")
+async def verification_status(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
+    transfer = await db.scalar(
+        select(DemoTransfer)
+        .where(
+            DemoTransfer.user_id == user.id,
+            DemoTransfer.status.in_(("verification", "processing")),
+        )
+        .order_by(DemoTransfer.id.desc())
+    )
+    if transfer:
+        await refresh_demo_transfer(db, user, transfer)
+    return {
+        "state": user.verification_state,
+        "required": user.verification_target,
+        "used": user.verification_used,
+        "processing_until": utc_iso(user.processing_until),
+        "active_transfer_id": transfer.id if transfer and transfer.status != "completed" else None,
+    }
+
+
 @app.post("/api/demo/buy", status_code=201)
 async def demo_buy(
     payload: BuyInput, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
@@ -723,6 +965,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
     result = {
         "id": user.id,
         "name": user.name,
+        "profile_label": user.profile_label or user.name,
         "username": user.username,
         "email": user.email,
         "created_at": user.created_at,
@@ -730,6 +973,10 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         "transaction_count": transaction_count or 0,
         "needs_reply": bool(last_message and last_message.sender == "user"),
         "last_message_at": last_message.created_at if last_message else None,
+        "verification_state": user.verification_state,
+        "verification_required": user.verification_target,
+        "verification_used": user.verification_used,
+        "processing_until": utc_iso(user.processing_until),
     }
     if not detailed:
         return result
@@ -789,6 +1036,83 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
     return result
 
 
+@app.post("/api/staff/clients", status_code=201)
+async def staff_create_client(
+    payload: StaffClientCreateInput,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    username = (payload.username or f"client_{secrets.token_hex(3)}").strip().lower()
+    email = str(payload.email).lower() if payload.email else f"{username}@momentum.local"
+    temporary_password = make_temporary_password()
+    user = User(
+        name=payload.name.strip(),
+        profile_label=payload.profile_label.strip(),
+        username=username,
+        email=email,
+        password_hash=hash_password(temporary_password),
+        verification_target=payload.required_codes,
+        verification_used=0,
+        verification_state="locked" if payload.required_codes else "completed",
+    )
+    db.add(user)
+    try:
+        await db.flush()
+        await provision_user(db, user)
+        for _index in range(payload.required_codes):
+            db.add(ConfirmationCode(user_id=user.id, code=make_otp(), status="ready"))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username or email is already registered")
+    return {
+        "client": await serialize_staff_client(db, user, detailed=True),
+        "temporary_password": temporary_password,
+    }
+
+
+@app.post("/api/staff/clients/{user_id}/reset-password")
+async def staff_reset_client_password(
+    user_id: int,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    temporary_password = make_temporary_password()
+    client.password_hash = hash_password(temporary_password)
+    sessions = list((await db.scalars(select(Session).where(Session.user_id == client.id))).all())
+    for session in sessions:
+        await db.delete(session)
+    await db.commit()
+    return {"temporary_password": temporary_password}
+
+
+@app.patch("/api/staff/clients/{user_id}/verification")
+async def staff_update_verification(
+    user_id: int,
+    payload: StaffVerificationInput,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if payload.required_codes < client.verification_used:
+        raise HTTPException(
+            status_code=422,
+            detail="Required codes cannot be lower than the number already used",
+        )
+    client.verification_target = payload.required_codes
+    if client.verification_state not in {"verification", "processing"}:
+        client.verification_state = (
+            "locked" if payload.required_codes > client.verification_used else "completed"
+        )
+    await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
 @app.get("/api/staff/clients")
 async def staff_clients(
     query: str = "",
@@ -800,6 +1124,8 @@ async def staff_clients(
         term = f"%{query.strip().lower()}%"
         statement = statement.where(
             or_(
+                cast(User.id, String).like(term),
+                func.lower(User.profile_label).like(term),
                 func.lower(User.name).like(term),
                 func.lower(User.username).like(term),
                 func.lower(User.email).like(term),
@@ -843,18 +1169,15 @@ async def staff_adjust_balance(
     symbol = require_asset(payload.asset)
     wallet = await owned_wallet(db, client.id, symbol, lock=True)
     amount = as_decimal(payload.amount)
-    if payload.action == "debit" and as_decimal(wallet.balance) < amount:
-        raise HTTPException(status_code=422, detail="Adjustment exceeds the available balance")
-    direction = Decimal("1") if payload.action == "credit" else Decimal("-1")
-    wallet.balance = as_decimal(wallet.balance) + amount * direction
+    wallet.balance = as_decimal(wallet.balance) + amount
     transaction = Transaction(
         user_id=client.id,
-        kind="receive" if payload.action == "credit" else "send",
+        kind="receive",
         status="approved",
         asset=symbol,
-        amount=amount * direction,
+        amount=amount,
         usd_value=(amount * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
-        title=f"Manual {payload.action} by Momentum Operations",
+        title="Manual credit by Momentum Operations",
         details={"staff_id": staff.id, "reason": "Manual account adjustment"},
     )
     db.add(transaction)
@@ -889,6 +1212,14 @@ async def staff_generate_codes(
     client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+    active_count = await db.scalar(
+        select(func.count()).select_from(ConfirmationCode).where(
+            ConfirmationCode.user_id == client.id,
+            ConfirmationCode.status == "ready",
+        )
+    )
+    if (active_count or 0) + payload.count > 1000:
+        raise HTTPException(status_code=422, detail="A profile can have at most 1000 ready codes")
     created = []
     for _index in range(payload.count):
         item = ConfirmationCode(user_id=client.id, code=make_otp(), status="ready")
@@ -904,11 +1235,24 @@ async def staff_clear_codes(
     _: User = Depends(current_staff),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    active_transfer = await db.scalar(
+        select(DemoTransfer).where(
+            DemoTransfer.user_id == user_id,
+            DemoTransfer.status.in_(("verification", "processing")),
+        )
+    )
+    if active_transfer:
+        raise HTTPException(status_code=409, detail="Codes cannot be cleared during an active transfer")
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
     items = list(
         (await db.scalars(select(ConfirmationCode).where(ConfirmationCode.user_id == user_id))).all()
     )
     for item in items:
         await db.delete(item)
+    client.verification_used = 0
+    client.verification_state = "locked" if client.verification_target else "completed"
     await db.commit()
     return Response(status_code=204)
 

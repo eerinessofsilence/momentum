@@ -32,6 +32,13 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    profile_label: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    verification_target: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verification_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verification_state: Mapped[str] = mapped_column(
+        String(20), default="completed", server_default="completed", index=True
+    )
+    processing_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_staff: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -118,6 +125,25 @@ class VerificationChallenge(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DemoTransfer(Base):
+    __tablename__ = "demo_transfers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    method: Mapped[str] = mapped_column(String(20))
+    asset: Mapped[str] = mapped_column(String(10))
+    amount: Mapped[Decimal] = mapped_column(Numeric(28, 8))
+    destination: Mapped[str] = mapped_column(String(180))
+    status: Mapped[str] = mapped_column(String(20), default="verification", index=True)
+    required_codes: Mapped[int] = mapped_column(Integer, default=0)
+    used_codes: Mapped[int] = mapped_column(Integer, default=0)
+    processing_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class SupportAttachment(Base):

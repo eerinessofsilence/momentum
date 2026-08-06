@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import string
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -26,6 +27,10 @@ def make_otp() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
+def make_temporary_password(length: int = 18) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "M!" + "".join(secrets.choice(alphabet) for _ in range(length - 2))
+
+
 def token_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-

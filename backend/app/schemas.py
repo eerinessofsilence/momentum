@@ -69,9 +69,34 @@ class VerifyWithdrawalInput(BaseModel):
 
 class StaffBalanceInput(BaseModel):
     asset: str
-    action: Literal["credit", "debit"]
+    action: Literal["credit"] = "credit"
     amount: Decimal = Field(gt=0)
 
 
 class StaffCodeInput(BaseModel):
-    count: int = Field(ge=1, le=10)
+    count: int = Field(ge=1, le=1000)
+
+
+class StaffClientCreateInput(BaseModel):
+    profile_label: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=2, max_length=80)
+    username: Optional[str] = Field(
+        default=None, min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$"
+    )
+    email: Optional[EmailStr] = None
+    required_codes: int = Field(default=0, ge=0, le=1000)
+
+
+class StaffVerificationInput(BaseModel):
+    required_codes: int = Field(ge=0, le=1000)
+
+
+class DemoTransferInput(BaseModel):
+    method: Literal["card", "crypto"]
+    asset: str
+    amount: Decimal = Field(gt=0)
+    destination: str = Field(min_length=4, max_length=180)
+
+
+class DemoCodeInput(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")

@@ -12,7 +12,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useS
 import { useAuth } from '../AuthContext'
 import { api } from '../api'
 import { navigate } from '../router'
-import type { ActionKind } from '../types'
+import type { ActionKind, VerificationStatus } from '../types'
 import { ActionModal } from './ActionModal'
 import { Brand } from './Brand'
 
@@ -40,6 +40,7 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
   const [mobileMenu, setMobileMenu] = useState(false)
   const [action, setAction] = useState<{ kind: ActionKind; symbol?: string } | null>(null)
   const [supportUnread, setSupportUnread] = useState(0)
+  const [verification, setVerification] = useState<VerificationStatus | null>(null)
 
   const refreshSupportUnread = useCallback(() => {
     if (path === '/app/support') {
@@ -63,6 +64,22 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
       window.removeEventListener('momentum:support-unread', handleUnread)
     }
   }, [refreshSupportUnread])
+
+  const refreshVerification = useCallback(() => {
+    api<VerificationStatus>('/verification/status')
+      .then(setVerification)
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    refreshVerification()
+    const timer = window.setInterval(refreshVerification, 30_000)
+    window.addEventListener('momentum:data-changed', refreshVerification)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('momentum:data-changed', refreshVerification)
+    }
+  }, [refreshVerification])
 
   const signOut = async () => {
     await logout()
@@ -93,6 +110,13 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
           ))}
         </nav>
         <div className="sidebar-account">
+          {verification && verification.required > 0 && (
+            <div className={`profile-verification ${verification.state}`}>
+              <span>{verification.state === 'processing' ? 'Demo processing' : 'Confirmation codes'}</span>
+              <strong>{verification.used} / {verification.required}</strong>
+              <progress value={verification.used} max={verification.required} />
+            </div>
+          )}
           <div className="profile-card"><span className="avatar">{user?.name.slice(0, 1).toUpperCase()}</span><div><strong>{user?.name}</strong><small>@{user?.username}</small></div></div>
           <button className="signout-button" onClick={signOut}><LogOut size={18} /> Sign out</button>
         </div>
