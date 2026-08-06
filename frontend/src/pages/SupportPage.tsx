@@ -2,6 +2,7 @@ import { ImageSquare as ImagePlus, Paperclip, PaperPlaneTilt as Send } from '@ph
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { PageHeading } from '../components/PageParts'
+import { Button, Card, Notice } from '../components/UI'
 import { timeLabel } from '../format'
 import type { SupportMessage } from '../types'
 
@@ -49,21 +50,21 @@ export function SupportPage() {
   return (
     <div className="page-content support-page">
       <PageHeading title="Support" description="Our team is here to help. Attach a screenshot if needed." />
-      <section className="support-card">
+      <Card className="support-card">
         <header className="support-agent"><span className="avatar support-avatar">M</span><div><strong>Momentum Support</strong><span><i /> Online · Support assistant</span></div></header>
         <div className="chat-messages" ref={listRef} aria-live="polite">
-          {messages.map((message) => <div className={`chat-row ${message.sender}`} key={message.id}><div className="chat-bubble">{message.attachment && <a href={message.attachment.url} target="_blank" rel="noreferrer" className="chat-attachment"><img src={message.attachment.url} alt={message.attachment.filename} /><span><ImagePlus size={15} /> {message.attachment.filename}</span></a>}<p>{message.body}</p><time>{timeLabel(message.created_at)}</time></div></div>)}
+          {messages.map((message) => <div className={`chat-row ${message.sender}`} key={message.id}><div className="chat-bubble">{message.attachment && <a href={message.attachment.url} target="_blank" rel="noreferrer" className="chat-attachment"><img src={message.attachment.url} alt={message.attachment.filename} /><span><ImagePlus size={16} /> {message.attachment.filename}</span></a>}<p>{message.body}</p><time>{timeLabel(message.created_at)}</time></div></div>)}
         </div>
         <form className="chat-composer" onSubmit={submit}>
-          {attachment && <div className="pending-attachment"><ImagePlus size={16} /><span>{attachment.filename}</span><button type="button" onClick={() => setAttachment(null)}>Remove</button></div>}
-          {error && <div className="form-error">{error}</div>}
+          {attachment && <div className="pending-attachment"><ImagePlus size={16} /><span>{attachment.filename}</span><Button variant="ghost" size="small" onClick={() => setAttachment(null)}>Remove</Button></div>}
+          {error && <Notice variant="danger">{error}</Notice>}
           <div className="composer-row">
             <label className="attach-button" aria-label="Attach screenshot"><Paperclip size={20} /><input type="file" accept="image/png,image/jpeg,image/webp" onChange={pickAttachment} disabled={uploading} /></label>
             <input value={body} onChange={(event) => setBody(event.target.value)} placeholder={uploading ? 'Uploading screenshot…' : 'Type a message…'} aria-label="Support message" />
-            <button className="composer-send" disabled={sending || uploading || !body.trim()} aria-label="Send message"><Send size={19} /></button>
+            <Button type="submit" variant="primary" size="small" className="composer-send" disabled={sending || uploading || !body.trim()} aria-label="Send message"><Send size={20} /></Button>
           </div>
         </form>
-      </section>
+      </Card>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { X } from '@phosphor-icons/react'
 import { type ReactNode, useEffect, useRef } from 'react'
+import { Button, CardHeader } from './UI'
 
 export function Modal({
   title,
@@ -52,10 +53,12 @@ export function Modal({
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <div className="modal-header">
-          <h2 id="modal-title" className="font-heading text-xl font-bold">{title}</h2>
-          <button className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={20} /></button>
-        </div>
+        <CardHeader
+          className="modal-header"
+          title={title}
+          titleId="modal-title"
+          trailing={<Button variant="ghost" size="small" className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={20} /></Button>}
+        />
         {children}
       </div>
     </div>

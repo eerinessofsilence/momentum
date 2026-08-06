@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../AuthContext";
 import { useShell } from "../components/AppShell";
 import { LoadingPanel, PageHeading, TransactionRow, WalletRow } from "../components/PageParts";
+import { Card, CardHeader, Notice, Tabs } from "../components/UI";
 import { money } from "../format";
 import type { DashboardData, DashboardPeriod } from "../types";
 
@@ -49,7 +50,7 @@ export function OverviewPage() {
         title={`${greeting}, ${user?.name}`}
         description="Here’s a snapshot of your portfolio."
       />
-      {error && <div className="form-error">{error}</div>}
+      {error && <Notice variant="danger">{error}</Notice>}
       {!data ? (
         <LoadingPanel />
       ) : (
@@ -92,42 +93,32 @@ export function OverviewPage() {
               </div>
             </div>
             <BalanceChart key={period} values={data.periods[period].values} />
-            <div className="period-switcher" role="tablist" aria-label="Portfolio chart period">
-              {periods.map((item) => (
-                <button
-                  key={item}
-                  className={period === item ? "active" : ""}
-                  onClick={() => selectPeriod(item)}
-                  role="tab"
-                  aria-selected={period === item}>
-                  {item}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              className="period-switcher"
+              variant="compact"
+              ariaLabel="Portfolio chart period"
+              value={period}
+              onChange={selectPeriod}
+              items={periods.map((item) => ({ value: item, label: item }))}
+            />
           </section>
           <div className="overview-grid">
-            <section className="panel-card">
-              <div className="panel-heading">
-                <h2>Portfolio</h2>
-                <span>{data.wallets.length} chains</span>
-              </div>
+            <Card className="panel-card">
+              <CardHeader title="Portfolio" trailing={<span>{data.wallets.length} chains</span>} />
               <div className="panel-list">
                 {data.wallets.map((wallet) => (
                   <WalletRow key={wallet.id} wallet={wallet} compact />
                 ))}
               </div>
-            </section>
-            <section className="panel-card recent-card">
-              <div className="panel-heading">
-                <h2>Recent transactions</h2>
-                <a href="/app/history">View all</a>
-              </div>
+            </Card>
+            <Card className="panel-card recent-card">
+              <CardHeader title="Recent transactions" trailing={<a href="/app/history">View all</a>} />
               <div className="panel-list">
                 {data.transactions.slice(0, 4).map((transaction) => (
                   <TransactionRow key={transaction.id} transaction={transaction} compact />
                 ))}
               </div>
-            </section>
+            </Card>
           </div>
         </>
       )}

@@ -3,6 +3,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
 import { PageHeading } from '../components/PageParts'
+import { Button, Card, ListRow, Notice, Tabs } from '../components/UI'
 import { navigate } from '../router'
 import type { Theme } from '../types'
 
@@ -24,7 +25,7 @@ export function SettingsPage() {
   return (
     <div className="page-content settings-page">
       <PageHeading title="Settings" description="Account, preferences, limits, and support." />
-      <section className="panel-card settings-card">
+      <Card className="panel-card settings-card">
         <SettingsSection title="Profile">
           <SettingRow label="Name" value={user?.name || ''} />
           <SettingRow label="Username" value={`@${user?.username}`} />
@@ -38,22 +39,22 @@ export function SettingsPage() {
           <SettingRow label="Manual verification threshold" value="$10,000" />
         </SettingsSection>
         <SettingsSection title="Preferences">
-          <div className="setting-row"><span><Moon size={18} /> Theme</span><div className="segmented-control"><button className={theme === 'dark' ? 'active' : ''} onClick={() => persist('dark', sounds)}><Moon size={15} /> Dark</button><button className={theme === 'light' ? 'active' : ''} onClick={() => persist('light', sounds)}><Sun size={15} /> Light</button></div></div>
-          <div className="setting-row"><span><Volume2 size={18} /> Notification sounds</span><button className={`toggle ${sounds ? 'on' : ''}`} onClick={() => persist(theme, !sounds)} aria-pressed={sounds}><span /></button></div>
+          <div className="setting-row"><span><Moon size={20} /> Theme</span><Tabs className="segmented-control" variant="segmented" ariaLabel="Theme" value={theme} onChange={(value) => persist(value, sounds)} items={[{ value: 'dark', label: 'Dark', icon: <Moon size={16} /> }, { value: 'light', label: 'Light', icon: <Sun size={16} /> }]} /></div>
+          <div className="setting-row"><span><Volume2 size={20} /> Notification sounds</span><button className={`toggle ${sounds ? 'on' : ''}`} onClick={() => persist(theme, !sounds)} aria-pressed={sounds}><span /></button></div>
         </SettingsSection>
         <SettingsSection title="Help with a transaction">
           <p className="settings-copy">Need help with a transaction? Submit its hash and Momentum Support will review the details.</p>
-          <form className="hash-form" onSubmit={lookup}><div className="hash-input"><Search size={18} /><input value={hash} onChange={(event) => setHash(event.target.value)} placeholder="Enter transaction hash" /></div><button className="button secondary">Submit hash</button></form>
-          {notice && <div className="success-inline">{notice}</div>}
+          <form className="hash-form" onSubmit={lookup}><div className="hash-input"><Search size={20} /><input value={hash} onChange={(event) => setHash(event.target.value)} placeholder="Enter transaction hash" /></div><Button type="submit">Submit hash</Button></form>
+          {notice && <Notice variant="success">{notice}</Notice>}
         </SettingsSection>
         <SettingsSection title="Contact Momentum">
           <div className="contact-grid"><a href={`mailto:${config.support_email}`} className="contact-card"><span><Mail /></span><div><strong>Email</strong><small>{config.support_email}</small></div><ExternalLink size={16} /></a><a href="https://t.me/momentum_support" target="_blank" rel="noreferrer" className="contact-card"><span><AtSign /></span><div><strong>Telegram</strong><small>{config.support_telegram}</small></div><ExternalLink size={16} /></a></div>
         </SettingsSection>
-        <div className="settings-footer"><button className="button danger" onClick={signOut}><LogOut size={17} /> Sign out</button><span>Momentum v{config.version}</span></div>
-      </section>
+        <div className="settings-footer"><Button variant="danger" onClick={signOut}><LogOut size={16} /> Sign out</Button><span>Momentum v{config.version}</span></div>
+      </Card>
     </div>
   )
 }
 
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) { return <section className="settings-section"><h2>{title}</h2>{children}</section> }
-function SettingRow({ label, value }: { label: string; value: string }) { return <div className="setting-row"><span>{label}</span><strong>{value}</strong></div> }
+function SettingRow({ label, value }: { label: string; value: string }) { return <ListRow className="setting-row" title={label} trailing={<strong>{value}</strong>} /> }

@@ -1,6 +1,7 @@
 import { type ComponentType, useEffect } from 'react'
 import { useAuth } from './AuthContext'
 import { AppShell } from './components/AppShell'
+import { MomentumMark } from './components/Brand'
 import { AuthPage } from './pages/AuthPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { OverviewPage } from './pages/OverviewPage'
@@ -8,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { SupportPage } from './pages/SupportPage'
 import { WalletsPage } from './pages/WalletsPage'
 import { StaffPage } from './pages/StaffPage'
+import { Spinner } from './components/UI'
 import { navigate, usePathname } from './router'
 
 const pages: Record<string, ComponentType> = {
@@ -24,7 +26,7 @@ function ProtectedShell({ path }: { path: string }) {
   useEffect(() => {
     if (!loading && !user) navigate('/auth', true)
   }, [loading, user])
-  if (loading) return <div className="app-loader"><span className="loader-mark">M</span><p>Loading Momentum…</p></div>
+  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label="Loading Momentum" /><p>Loading Momentum…</p></div>
   if (!user) return null
   if (user.is_staff) {
     navigate('/staff', true)
@@ -39,7 +41,7 @@ function StaffRoute() {
     if (!loading && !user) navigate('/auth', true)
     else if (!loading && user && !user.is_staff) navigate('/app/overview', true)
   }, [loading, user])
-  if (loading) return <div className="app-loader"><span className="loader-mark">M</span><p>Loading Operations…</p></div>
+  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label="Loading Operations" /><p>Loading Operations…</p></div>
   if (!user?.is_staff) return null
   return <StaffPage />
 }

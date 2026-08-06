@@ -30,6 +30,19 @@ import { api } from "../api";
 import { Brand } from "../components/Brand";
 import { CoinIcon } from "../components/CoinIcon";
 import { Modal } from "../components/Modal";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Input,
+  Notice,
+  Select,
+  Tabs,
+  Textarea
+} from "../components/UI";
 import { assetAmount, money, timeLabel } from "../format";
 import { navigate } from "../router";
 import type { StaffClient, StaffClientSummary, Wallet } from "../types";
@@ -88,22 +101,22 @@ function StaffSidebar({ open, onClose }: { open: boolean; onClose: () => void })
         </div>
         <nav className="staff-navigation">
           <a className="active" href="/staff" onClick={(event) => event.preventDefault()}>
-            <Users size={19} />
+            <Users size={20} />
             <span>Clients</span>
           </a>
           <button disabled>
-            <LayoutDashboard size={19} />
+            <LayoutDashboard size={20} />
             <span>Analytics</span>
             <small>Soon</small>
           </button>
           <button disabled>
-            <Settings size={19} />
+            <Settings size={20} />
             <span>Workspace</span>
             <small>Soon</small>
           </button>
         </nav>
         <div className="staff-sidebar-note">
-          <Headphones size={18} />
+          <Headphones size={20} />
           <div>
             <strong>Moderator mode</strong>
             <span>Changes are recorded in client activity.</span>
@@ -118,7 +131,7 @@ function StaffSidebar({ open, onClose }: { open: boolean; onClose: () => void })
             </div>
           </div>
           <button className="icon-button" onClick={signOut} aria-label="Sign out">
-            <LogOut size={18} />
+            <LogOut size={20} />
           </button>
         </div>
       </aside>
@@ -165,25 +178,22 @@ function AdjustBalanceModal({
             <span>Client</span>
             <strong>{client.name}</strong>
           </div>
-          <ChevronRight size={18} />
+          <ChevronRight size={20} />
           <CoinIcon symbol={wallet.symbol} size="sm" />
           <div>
             <span>Asset</span>
             <strong>{wallet.symbol}</strong>
           </div>
         </div>
-        <div className="adjust-warning">
-          <ShieldCheck size={18} />
+        <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning">
           <p>
             This creates an auditable credit transaction. Moderator accounts cannot debit clients.
           </p>
-        </div>
+        </Notice>
         <div className="staff-segmented"><button type="button" className="active"><ArrowDownLeft size={16} /> Credit only</button></div>
-        <label className="field-label">
-          Amount in {wallet.symbol}
+        <Field label={`Amount in ${wallet.symbol}`} hint={`Current balance: ${assetAmount(wallet.balance, wallet.symbol)}`}>
           <div className="amount-field">
-            <input
-              className="field-input"
+            <Input
               type="number"
               step="any"
               min="0"
@@ -195,16 +205,15 @@ function AdjustBalanceModal({
             />
             <span>{wallet.symbol}</span>
           </div>
-          <small>Current balance: {assetAmount(wallet.balance, wallet.symbol)}</small>
-        </label>
-        {error && <div className="form-error">{error}</div>}
+        </Field>
+        {error && <Notice variant="danger">{error}</Notice>}
         <div className="modal-actions">
-          <button className="button secondary" type="button" onClick={onClose}>
+          <Button onClick={onClose}>
             Cancel
-          </button>
-          <button className="button primary" disabled={busy || !Number(amount)}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy || !Number(amount)}>
             {busy ? "Applying…" : "Apply credit"}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -253,14 +262,14 @@ function CreateClientModal({
   return (
     <Modal title="Create client profile" onClose={onClose}>
       <form className="modal-body space-y-4" onSubmit={submit}>
-        <label className="field-label">Profile label<input className="field-input" value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} placeholder="Olena · campaign 1" autoFocus required /></label>
-        <label className="field-label">Client name<input className="field-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Olena" required /></label>
-        <label className="field-label">Username (optional)<input className="field-input" value={username} onChange={(event) => setUsername(event.target.value.replace(/[^A-Za-z0-9_]/g, ""))} placeholder="Generated automatically" /></label>
-        <label className="field-label">Email (optional)<input className="field-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Generated local address" /></label>
-        <label className="field-label">Required confirmation codes<input className="field-input" type="number" min="0" max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(0, Number(event.target.value))))} /></label>
+        <Field label="Profile label"><Input value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} placeholder="Enter a profile label" autoFocus required /></Field>
+        <Field label="Client name"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter the client's full name" required /></Field>
+        <Field label="Username" hint="Optional"><Input value={username} onChange={(event) => setUsername(event.target.value.replace(/[^A-Za-z0-9_]/g, ""))} placeholder="Leave blank to generate automatically" /></Field>
+        <Field label="Email" hint="Optional"><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Leave blank to generate automatically" /></Field>
+        <Field label="Required confirmation codes"><Input type="number" min="0" max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(0, Number(event.target.value))))} /></Field>
         <p className="fine-print">A temporary password and the requested one-time codes are generated securely. The password is shown once.</p>
-        {error && <div className="form-error">{error}</div>}
-        <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={busy}>{busy ? "Creating…" : "Create profile"}</button></div>
+        {error && <Notice variant="danger">{error}</Notice>}
+        <div className="modal-actions"><Button onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "Creating…" : "Create profile"}</Button></div>
       </form>
     </Modal>
   );
@@ -279,9 +288,9 @@ function TemporaryPasswordModal({
   return (
     <Modal title="Temporary credentials" onClose={onClose}>
       <div className="modal-body space-y-4">
-        <div className="adjust-warning"><ShieldCheck size={18} /><p>This password is shown only once. Copy it before closing this window.</p></div>
+        <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning"><p>This password is shown only once. Copy it before closing this window.</p></Notice>
         <dl className="credential-card"><div><dt>Login</dt><dd>{username}</dd></div><div><dt>Temporary password</dt><dd>{password}</dd></div></dl>
-        <button className="button primary w-full" onClick={copy}><Copy size={16} /> Copy login and password</button>
+        <Button variant="primary" className="w-full" onClick={copy}><Copy size={16} /> Copy login and password</Button>
       </div>
     </Modal>
   );
@@ -322,6 +331,9 @@ function ClientOverview({
     }
   };
   const clear = async () => {
+    if (!window.confirm("Clear all confirmation codes for this client? This action cannot be undone.")) {
+      return;
+    }
     setBusy(true);
     try {
       await api(`/staff/clients/${client.id}/codes`, { method: "DELETE" });
@@ -357,9 +369,16 @@ function ClientOverview({
     }
   };
   const readyCodes = client.codes.filter((item) => item.status === "ready").length;
-  const nextReadyId = client.codes
-    .filter((item) => item.status === "ready")
-    .sort((left, right) => left.id - right.id)[0]?.id;
+  const nextReadyId = client.codes.find((item) => item.status === "ready")?.id;
+  const verificationConfigured = client.verification_required > 0;
+  const verificationComplete =
+    verificationConfigured && client.verification_used >= client.verification_required;
+  const showCodePagination = client.codes.length > codesPerPage;
+  const verificationStatus = !verificationConfigured
+    ? "Verification is not configured."
+    : verificationComplete
+      ? `Verification completed · ${client.verification_used} of ${client.verification_required} codes used.`
+      : `${client.verification_used} of ${client.verification_required} confirmation codes used.`;
   const codePageCount = Math.max(1, Math.ceil(client.codes.length / codesPerPage));
   const currentCodePage = Math.min(codePage, codePageCount);
   const visibleCodes = client.codes.slice(
@@ -388,15 +407,126 @@ function ClientOverview({
   return (
     <div className="staff-overview-grid">
       <div className="staff-overview-main">
-        <section className="staff-section-card profile-summary">
-          <div className="staff-section-title">
-            <div>
-              <h3>Client profile</h3>
-            </div>
-            <span className="status-pill">
-              <i /> Active
-            </span>
+        <Card variant="nested" className="staff-section-card code-manager">
+          <CardHeader level={3} className="staff-section-title" title="Confirmation codes" trailing={<Badge>{readyCodes} available</Badge>} />
+          <p>{verificationStatus}</p>
+          <div className="code-controls">
+            <label>
+              <span>Quantity</span>
+              <Input
+                controlSize="small"
+                type="number"
+                min="1"
+                max="1000"
+                value={codeCount}
+                onChange={(event) =>
+                  setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))
+                }
+              />
+            </label>
+            <Button variant="primary" size="small" onClick={generate} disabled={busy}>
+              <Sparkles size={16} /> Generate
+            </Button>
+            {client.codes.length > 0 && (
+              <Button variant="danger" size="small" onClick={clear} disabled={busy}>
+                Clear all
+              </Button>
+            )}
           </div>
+          <div className="code-controls verification-target-control">
+            <label><span>Required total</span><Input controlSize="small" type="number" min={client.verification_used} max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(client.verification_used, Number(event.target.value))))} /></label>
+            {requiredCodes !== client.verification_required && (
+              <Button size="small" onClick={updateRequired} disabled={busy}>Save requirement</Button>
+            )}
+            {requiredCodes === 0 && client.verification_required === 0 && (
+              <span className="verification-requirement-hint">No codes required</span>
+            )}
+          </div>
+          <div className="code-list">
+            {client.codes.length === 0 ? (
+              <EmptyState compact className="codes-empty" icon={<ShieldCheck size={20} />} title="No available codes" />
+            ) : (
+              visibleCodes.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-label={`Copy code ${item.code}`}
+                  title="Copy code"
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.code);
+                    notify(`${item.code} copied`);
+                  }}>
+                  <span>
+                    <small>
+                      {item.status === "used"
+                        ? "Used"
+                        : verificationConfigured && !verificationComplete && item.id === nextReadyId
+                          ? "Next"
+                          : verificationConfigured
+                            ? "Waiting"
+                            : "Available"}
+                    </small>
+                    <strong>{item.code}</strong>
+                  </span>
+                  <Copy size={16} />
+                </button>
+              ))
+            )}
+          </div>
+          {showCodePagination && (
+            <div className="code-pagination">
+              <label className="code-page-size">
+                <Select
+                  controlSize="small"
+                  aria-label="Codes per page"
+                  value={codesPerPage}
+                  onChange={(event) => {
+                    setCodesPerPage(Number(event.target.value));
+                    setCodePage(1);
+                  }}>
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </Select>
+              </label>
+              <span className="code-page-summary">
+                {(currentCodePage - 1) * codesPerPage + 1}–{Math.min(currentCodePage * codesPerPage, client.codes.length)} of {client.codes.length}
+              </span>
+              <nav className="code-page-nav" aria-label="Confirmation codes pages">
+                <button
+                  type="button"
+                  aria-label="Previous codes page"
+                  disabled={currentCodePage === 1}
+                  onClick={() => setCodePage((page) => Math.max(1, page - 1))}>
+                  <CaretLeft size={16} />
+                </button>
+                {codePageItems.map((item) =>
+                  typeof item === "number" ? (
+                    <button
+                      type="button"
+                      key={item}
+                      className={item === currentCodePage ? "active" : ""}
+                      aria-current={item === currentCodePage ? "page" : undefined}
+                      onClick={() => setCodePage(item)}>
+                      {item}
+                    </button>
+                  ) : (
+                    <span key={item}>…</span>
+                  )
+                )}
+                <button
+                  type="button"
+                  aria-label="Next codes page"
+                  disabled={currentCodePage === codePageCount}
+                  onClick={() => setCodePage((page) => Math.min(codePageCount, page + 1))}>
+                  <ChevronRight size={16} />
+                </button>
+              </nav>
+            </div>
+          )}
+        </Card>
+        <Card variant="nested" className="staff-section-card profile-summary">
+          <CardHeader level={3} className="staff-section-title" title="Client profile" trailing={<Badge variant="success" dot>Active</Badge>} />
           <dl>
             <div><dt>Profile label</dt><dd>{client.profile_label}</dd></div>
             <div>
@@ -422,126 +552,11 @@ function ClientOverview({
               <dd>#{client.id.toString().padStart(5, "0")}</dd>
             </div>
           </dl>
-          <div className="profile-actions"><button className="button secondary small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</button></div>
-        </section>
-        <section className="staff-section-card code-manager">
-          <div className="staff-section-title">
-            <div>
-              <h3>Confirmation codes</h3>
-            </div>
-            <span className="neutral-pill">{readyCodes} ready</span>
-          </div>
-          <p>
-            Progress: {client.verification_used} of {client.verification_required} used · state: {client.verification_state}.
-          </p>
-          <div className="code-controls">
-            <label>
-              <span>Quantity</span>
-              <input
-                type="number"
-                min="1"
-                max="1000"
-                value={codeCount}
-                onChange={(event) =>
-                  setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))
-                }
-              />
-            </label>
-            <button className="button primary small" onClick={generate} disabled={busy}>
-              <Sparkles size={16} /> Generate
-            </button>
-            {client.codes.length > 0 && (
-              <button className="button secondary small" onClick={clear} disabled={busy}>
-                Clear all
-              </button>
-            )}
-          </div>
-          <div className="code-controls verification-target-control">
-            <label><span>Required total</span><input type="number" min={client.verification_used} max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(client.verification_used, Number(event.target.value))))} /></label>
-            <button className="button secondary small" onClick={updateRequired} disabled={busy || requiredCodes === client.verification_required}>Save requirement</button>
-          </div>
-          <div className="code-list">
-            {client.codes.length === 0 ? (
-              <div className="codes-empty">
-                <ShieldCheck size={20} />
-                <span>No active codes</span>
-              </div>
-            ) : (
-              visibleCodes.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    navigator.clipboard.writeText(item.code);
-                    notify("Code copied");
-                  }}>
-                  <span>
-                    <small>{item.status === "used" ? "Used" : item.id === nextReadyId ? "Next" : "Queued"}</small>
-                    <strong>{item.code}</strong>
-                  </span>
-                  <Copy size={15} />
-                </button>
-              ))
-            )}
-          </div>
-          {client.codes.length > 0 && (
-            <div className="code-pagination">
-              <label className="code-page-size">
-                <span>Show</span>
-                <select
-                  value={codesPerPage}
-                  onChange={(event) => {
-                    setCodesPerPage(Number(event.target.value));
-                    setCodePage(1);
-                  }}>
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                </select>
-              </label>
-              <span className="code-page-summary">
-                {(currentCodePage - 1) * codesPerPage + 1}–{Math.min(currentCodePage * codesPerPage, client.codes.length)} of {client.codes.length}
-              </span>
-              <nav className="code-page-nav" aria-label="Confirmation codes pages">
-                <button
-                  type="button"
-                  aria-label="Previous codes page"
-                  disabled={currentCodePage === 1}
-                  onClick={() => setCodePage((page) => Math.max(1, page - 1))}>
-                  <CaretLeft size={14} />
-                </button>
-                {codePageItems.map((item) =>
-                  typeof item === "number" ? (
-                    <button
-                      type="button"
-                      key={item}
-                      className={item === currentCodePage ? "active" : ""}
-                      aria-current={item === currentCodePage ? "page" : undefined}
-                      onClick={() => setCodePage(item)}>
-                      {item}
-                    </button>
-                  ) : (
-                    <span key={item}>…</span>
-                  )
-                )}
-                <button
-                  type="button"
-                  aria-label="Next codes page"
-                  disabled={currentCodePage === codePageCount}
-                  onClick={() => setCodePage((page) => Math.min(codePageCount, page + 1))}>
-                  <ChevronRight size={14} />
-                </button>
-              </nav>
-            </div>
-          )}
-        </section>
+          <div className="profile-actions"><Button size="small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</Button></div>
+        </Card>
       </div>
-      <section className="staff-section-card wallet-manager">
-        <div className="staff-section-title">
-          <div>
-            <h3>Wallets & balances</h3>
-          </div>
-          <strong>{money(client.total_balance)}</strong>
-        </div>
+      <Card variant="nested" className="staff-section-card wallet-manager">
+        <CardHeader level={3} className="staff-section-title" title="Wallets & balances" trailing={<strong>{money(client.total_balance)}</strong>} />
         <div className="staff-wallet-list">
           {client.wallets.map((wallet) => (
             <article key={wallet.id}>
@@ -556,13 +571,13 @@ function ClientOverview({
                 <strong>{assetAmount(wallet.balance, wallet.symbol)}</strong>
                 <span>{money(wallet.usd_value)}</span>
               </div>
-              <button className="button secondary small" onClick={() => onAdjust(wallet)}>
+              <Button size="small" onClick={() => onAdjust(wallet)}>
                 Adjust
-              </button>
+              </Button>
             </article>
           ))}
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -596,15 +611,13 @@ function ClientChat({
     }
   };
   return (
-    <section className="staff-chat-panel">
+    <Card variant="nested" className="staff-chat-panel">
       <div className="staff-chat-context">
-        <MessageCircle size={17} />
+        <MessageCircle size={16} />
         <span>
           Conversation with <strong>{client.name}</strong>
         </span>
-        <span className="status-pill">
-          <i /> Client
-        </span>
+        <Badge variant="success" dot>Client</Badge>
       </div>
       <div className="staff-chat-messages" ref={chatRef}>
         {client.messages.map((message) => (
@@ -617,36 +630,32 @@ function ClientChat({
         ))}
       </div>
       <form className="staff-chat-composer" onSubmit={submit}>
-        <textarea
+        <Textarea
+          controlSize="regular"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           placeholder="Write a clear, helpful reply…"
-          rows={2}
+          rows={1}
         />
-        <button className="button primary" disabled={busy || !body.trim()}>
-          <Send size={17} /> Send reply
-        </button>
+        <Button type="submit" variant="primary" disabled={busy || !body.trim()}>
+          <Send size={16} /> Send reply
+        </Button>
       </form>
-    </section>
+    </Card>
   );
 }
 
 function ClientActivity({ client }: { client: StaffClient }) {
   return (
-    <section className="staff-section-card staff-activity">
-      <div className="staff-section-title">
-        <div>
-          <h3>Recent activity</h3>
-        </div>
-        <span className="neutral-pill">{client.transaction_count} total</span>
-      </div>
+    <Card variant="nested" className="staff-section-card staff-activity">
+      <CardHeader level={3} className="staff-section-title" title="Recent activity" trailing={<Badge>{client.transaction_count} total</Badge>} />
       <div>
         {client.transactions.map((item) => {
           const incoming = Number(item.amount) >= 0;
           return (
             <article key={item.id}>
               <span className={`activity-icon ${incoming ? "incoming" : "outgoing"}`}>
-                {incoming ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
+                {incoming ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
               </span>
               <div>
                 <strong>{item.title}</strong>
@@ -670,7 +679,7 @@ function ClientActivity({ client }: { client: StaffClient }) {
           );
         })}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -791,17 +800,18 @@ export function StaffPage() {
               <em>Recorded events</em>
             </article>
           </section>
-          {error && <div className="form-error staff-error">{error}</div>}
+          {error && <Notice variant="danger" className="staff-error">{error}</Notice>}
           <section className="staff-workspace">
             <aside className="client-list-panel">
               <div className="client-list-heading">
                 <div>
                   <h2>Clients</h2>
-                  <button className="button primary small" onClick={() => setCreateOpen(true)}><Plus size={15} /> New</button>
+                  <Button variant="primary" size="small" onClick={() => setCreateOpen(true)}><Plus size={16} /> New</Button>
                 </div>
                 <div className="staff-search">
-                  <Search size={17} />
-                  <input
+                  <Search size={16} />
+                  <Input
+                    controlSize="small"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search label, ID, name, email, username…"
@@ -810,11 +820,11 @@ export function StaffPage() {
               </div>
               <div className="client-list">
                 {loading ? (
-                  <div className="client-list-empty">Loading clients…</div>
+                  <EmptyState compact className="client-list-empty" title="Loading clients…" />
                 ) : clients.length === 0 ? (
-                  <div className="client-list-empty">No clients match your search.</div>
+                  <EmptyState compact className="client-list-empty" title="No matching clients" description="Try another name, label, username, email, or ID." />
                 ) : (
-                  clients.map((item, index) => (
+                  clients.map((item) => (
                     <button
                       className={item.id === selectedId ? "active" : ""}
                       key={item.id}
@@ -832,14 +842,11 @@ export function StaffPage() {
                       <span className="client-card-value">
                         <strong>{money(item.total_balance, 0)}</strong>
                         {item.needs_reply ? (
-                          <small className="reply-dot">
-                            <i /> Reply
-                          </small>
+                          <Badge variant="danger" dot className="reply-dot">Reply</Badge>
                         ) : (
                           <small>{item.transaction_count} txns</small>
                         )}
                       </span>
-                      <span className="client-number">{String(index + 1).padStart(2, "0")}</span>
                     </button>
                   ))
                 )}
@@ -847,11 +854,7 @@ export function StaffPage() {
             </aside>
             <div className="client-detail-panel">
               {!client ? (
-                <div className="client-detail-empty">
-                  <Users size={30} />
-                  <h3>Select a client</h3>
-                  <p>Choose an account from the list to open its workspace.</p>
-                </div>
+                <EmptyState className="client-detail-empty" icon={<Users size={24} />} title="Select a client" description="Choose an account from the list to open its workspace." />
               ) : (
                 <>
                   <header className="client-detail-header">
@@ -860,9 +863,7 @@ export function StaffPage() {
                       <div>
                         <div>
                           <h2>{client.profile_label}</h2>
-                          <span className="status-pill">
-                            <i /> Active
-                          </span>
+                          <Badge variant="success" dot>Active</Badge>
                         </div>
                         <p>
                           {client.name} · @{client.username} · {client.email}
@@ -876,23 +877,17 @@ export function StaffPage() {
                       <strong>{money(client.total_balance)}</strong>
                     </div>
                   </header>
-                  <nav className="client-tabs">
-                    <button
-                      className={tab === "overview" ? "active" : ""}
-                      onClick={() => setTab("overview")}>
-                      <WalletCards size={16} /> Overview
-                    </button>
-                    <button
-                      className={tab === "chat" ? "active" : ""}
-                      onClick={() => setTab("chat")}>
-                      <MessageCircle size={16} /> Conversation{client.needs_reply && <i />}
-                    </button>
-                    <button
-                      className={tab === "activity" ? "active" : ""}
-                      onClick={() => setTab("activity")}>
-                      <Clock3 size={16} /> Activity
-                    </button>
-                  </nav>
+                  <Tabs
+                    className="client-tabs"
+                    ariaLabel="Client workspace"
+                    value={tab}
+                    onChange={setTab}
+                    items={[
+                      { value: "overview", label: "Overview", icon: <WalletCards size={16} /> },
+                      { value: "chat", label: "Conversation", icon: <MessageCircle size={16} />, indicator: client.needs_reply },
+                      { value: "activity", label: "Activity", icon: <Clock3 size={16} /> }
+                    ]}
+                  />
                   <div className="client-detail-body">
                     {tab === "overview" && (
                       <ClientOverview
@@ -938,12 +933,7 @@ export function StaffPage() {
         />
       )}
       {credentials && <TemporaryPasswordModal username={credentials.username} password={credentials.password} onClose={() => setCredentials(null)} />}
-      {toast && (
-        <div className="staff-toast">
-          <Check size={17} />
-          {toast}
-        </div>
-      )}
+      {toast && <Notice variant="success" icon={<Check size={16} />} className="staff-toast">{toast}</Notice>}
     </div>
   );
 }

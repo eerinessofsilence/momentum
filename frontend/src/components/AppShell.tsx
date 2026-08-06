@@ -15,6 +15,7 @@ import { navigate } from '../router'
 import type { ActionKind, VerificationStatus } from '../types'
 import { ActionModal } from './ActionModal'
 import { Brand } from './Brand'
+import { Badge } from './UI'
 
 export type ShellContext = {
   openAction: (kind: ActionKind, symbol?: string) => void
@@ -105,7 +106,7 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
               onClick={(event) => { event.preventDefault(); setMobileMenu(false); navigate(to) }}
               className={`nav-item ${path === to ? 'active' : ''}`}
             >
-              <Icon size={20} /><span>{label}</span>{to === '/app/support' && supportUnread > 0 && <span className="nav-badge" aria-label={`${supportUnread} unread support ${supportUnread === 1 ? 'message' : 'messages'}`}>{supportUnread > 99 ? '99+' : supportUnread}</span>}
+              <Icon size={20} /><span>{label}</span>{to === '/app/support' && supportUnread > 0 && <Badge variant="accent" className="nav-badge" aria-label={`${supportUnread} unread support ${supportUnread === 1 ? 'message' : 'messages'}`}>{supportUnread > 99 ? '99+' : supportUnread}</Badge>}
             </a>
           ))}
         </nav>
@@ -118,7 +119,7 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
             </div>
           )}
           <div className="profile-card"><span className="avatar">{user?.name.slice(0, 1).toUpperCase()}</span><div><strong>{user?.name}</strong><small>@{user?.username}</small></div></div>
-          <button className="signout-button" onClick={signOut}><LogOut size={18} /> Sign out</button>
+          <button className="signout-button" onClick={signOut}><LogOut size={20} /> Sign out</button>
         </div>
       </aside>
       <main className="app-main">

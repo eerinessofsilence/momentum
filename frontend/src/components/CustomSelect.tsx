@@ -86,7 +86,7 @@ export function CustomSelect({
       <button
         ref={buttonRef}
         type="button"
-        className="custom-select-trigger"
+        className="custom-select-trigger ui-control--large"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -94,7 +94,7 @@ export function CustomSelect({
         onClick={() => setOpen((current) => !current)}
       >
         <span>{selected?.label}</span>
-        <ChevronDown className="custom-select-chevron" size={19} aria-hidden="true" />
+        <ChevronDown className="custom-select-chevron" size={20} aria-hidden="true" />
       </button>
       {open && (
         <div className="custom-select-menu" id={listId} role="listbox" aria-label={ariaLabel}>
@@ -113,7 +113,7 @@ export function CustomSelect({
                 onClick={() => choose(index)}
               >
                 <span>{option.label}</span>
-                {isSelected && <Check size={17} aria-hidden="true" />}
+                {isSelected && <Check size={16} aria-hidden="true" />}
               </button>
             )
           })}

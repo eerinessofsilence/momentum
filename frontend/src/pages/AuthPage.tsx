@@ -2,6 +2,7 @@ import { Pulse as Activity, Clock as Clock3, ShieldCheck } from "@phosphor-icons
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { Brand } from "../components/Brand";
+import { Button, Field, Input, Notice, Tabs } from "../components/UI";
 import { navigate } from "../router";
 
 export function AuthPage() {
@@ -60,28 +61,20 @@ export function AuthPage() {
       </section>
       <section className="auth-form-panel">
         <div className="auth-form-wrap">
-          <div className="auth-tabs" role="tablist">
-            <button
-              className={mode === "login" ? "active" : ""}
-              onClick={() => {
-                setMode("login");
-                setError("");
-              }}
-              role="tab"
-              aria-selected={mode === "login"}>
-              Sign in
-            </button>
-            <button
-              className={mode === "register" ? "active" : ""}
-              onClick={() => {
-                setMode("register");
-                setError("");
-              }}
-              role="tab"
-              aria-selected={mode === "register"}>
-              Create account
-            </button>
-          </div>
+          <Tabs
+            className="auth-tabs"
+            variant="segmented"
+            ariaLabel="Authentication mode"
+            value={mode}
+            onChange={(nextMode) => {
+              setMode(nextMode);
+              setError("");
+            }}
+            items={[
+              { value: "login", label: "Sign in" },
+              { value: "register", label: "Create account" },
+            ]}
+          />
           <div className="auth-title">
             <h2>{mode === "login" ? "Welcome back" : "Create your wallet"}</h2>
             <p>
@@ -92,34 +85,28 @@ export function AuthPage() {
           </div>
           <form className="auth-form" onSubmit={submit}>
             {mode === "register" && (
-              <label className="field-label">
-                Name
-                <input
-                  className="field-input"
+              <Field label="Name">
+                <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Alex Morgan"
                   autoComplete="name"
                   required
                 />
-              </label>
+              </Field>
             )}
-            <label className="field-label">
-              Username{mode === "login" && " or email"}
-              <input
-                className="field-input"
+            <Field label={`Username${mode === "login" ? " or email" : ""}`}>
+              <Input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder="Your username..."
                 autoComplete="username"
                 required
               />
-            </label>
+            </Field>
             {mode === "register" && (
-              <label className="field-label">
-                Email
-                <input
-                  className="field-input"
+              <Field label="Email">
+                <Input
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -127,12 +114,10 @@ export function AuthPage() {
                   autoComplete="email"
                   required
                 />
-              </label>
+              </Field>
             )}
-            <label className="field-label">
-              Password
-              <input
-                className="field-input"
+            <Field label="Password">
+              <Input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -141,15 +126,11 @@ export function AuthPage() {
                 minLength={mode === "register" ? 8 : 1}
                 required
               />
-            </label>
-            {error && (
-              <div className="form-error" role="alert">
-                {error}
-              </div>
-            )}
-            <button className="button primary auth-submit" disabled={busy}>
+            </Field>
+            {error && <Notice variant="danger">{error}</Notice>}
+            <Button type="submit" variant="primary" size="large" className="auth-submit" disabled={busy}>
               {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create wallet"}
-            </button>
+            </Button>
           </form>
           <p className="auth-help">
             New to Momentum? <button onClick={() => setMode("register")}>Create an account</button>
