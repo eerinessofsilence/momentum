@@ -21,9 +21,17 @@ def test_login_and_seeded_dashboard(client):
     ]
     assert len(dashboard["transactions"]) == 4
     assert set(dashboard["periods"]) == {"1H", "24H", "1W", "1M", "ALL"}
-    assert dashboard["periods"]["24H"]["change"] == "-0.60"
-    assert dashboard["periods"]["1W"]["change"] == "2.84"
-    assert dashboard["periods"]["1W"]["values"][-1] == dashboard["total_balance"]
+    # The chart is reconstructed from the transaction ledger. The seeded demo
+    # account's deposits all happened at seed time, i.e. before every period's
+    # window start relative to "now" - so every window opens at $0 and closes
+    # at the current balance, and the zero-start guard keeps "change" at 0.
+    expected_points = {"1H": 7, "24H": 13, "1W": 13, "1M": 13, "ALL": 13}
+    for label, point_count in expected_points.items():
+        period = dashboard["periods"][label]
+        assert period["change"] == "0.00"
+        assert len(period["values"]) == point_count
+        assert period["values"][0] == "0.00"
+        assert period["values"][-1] == dashboard["total_balance"]
 
 
 def test_seeded_client_accounts_accept_documented_credentials(client):

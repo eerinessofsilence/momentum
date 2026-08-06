@@ -8,6 +8,7 @@ os.environ["DATABASE_URL"] = (
     f"sqlite+aiosqlite:////private/tmp/momentum-test-{uuid.uuid4().hex}.sqlite3"
 )
 os.environ["DEMO_MODE"] = "true"
+os.environ["PRICE_REFRESH_ENABLED"] = "false"
 
 from app.main import app  # noqa: E402
 

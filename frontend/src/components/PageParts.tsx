@@ -16,7 +16,7 @@ export function WalletRow({ wallet, compact = false, onReceive }: { wallet: Wall
       <CoinIcon symbol={wallet.symbol} size={compact ? 'sm' : 'md'} />
       <div className="wallet-identity"><strong>{wallet.name}</strong><span>{compact ? `${wallet.symbol} · ${wallet.network}` : wallet.address}</span></div>
       <div className="wallet-numbers"><strong>{assetAmount(wallet.balance, wallet.symbol)}</strong><span>{money(wallet.usd_value)}</span></div>
-      {compact && <Badge variant={positive ? 'success' : 'danger'} className={`change-chip ${positive ? 'positive' : 'negative'}`}>{positive ? '+' : ''}{wallet.change_24h}%</Badge>}
+      {compact && Number(wallet.balance) > 0 && <Badge variant={positive ? 'success' : 'danger'} className={`change-chip ${positive ? 'positive' : 'negative'}`}>{positive ? '+' : ''}{wallet.change_24h}%</Badge>}
       {!compact && onReceive && <Button size="small" onClick={onReceive}>Receive</Button>}
     </div>
   )

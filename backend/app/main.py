@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import secrets
 import uuid
 from contextlib import asynccontextmanager
@@ -38,6 +40,7 @@ from .models import (
     User,
     Wallet,
 )
+from .prices import price_refresh_loop
 from .schemas import (
     BuyInput,
     DemoCodeInput,
@@ -68,6 +71,7 @@ COOKIE_NAME = "momentum_session"
 STAFF_COOKIE_NAME = "momentum_staff_session"
 SUPPORTED_ASSETS = {"BTC", "ETH", "USDT", "TON"}
 MONEY_EPSILON = Decimal("0.00000001")
+SWAP_FEE_RATE = Decimal("0.005")
 
 
 @asynccontextmanager
@@ -83,7 +87,18 @@ async def lifespan(_: FastAPI):
     async with SessionLocal() as session:
         await seed_demo_user(session)
         await seed_staff_workspace(session)
-    yield
+    price_task = (
+        asyncio.create_task(price_refresh_loop(SessionLocal))
+        if settings.price_refresh_enabled
+        else None
+    )
+    try:
+        yield
+    finally:
+        if price_task:
+            price_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await price_task
 
 
 app = FastAPI(title="Momentum API", version="1.0.0", lifespan=lifespan)
@@ -443,74 +458,118 @@ async def exit_staff_impersonation(
     return {"user": serialize_user(staff, preference)}
 
 
+# (period label, lookback window or None for "since account creation", sample points)
+PERIOD_WINDOWS: list[tuple[str, timedelta | None, int]] = [
+    ("1H", timedelta(hours=1), 7),
+    ("24H", timedelta(hours=24), 13),
+    ("1W", timedelta(days=7), 13),
+    ("1M", timedelta(days=30), 13),
+    ("ALL", None, 13),
+]
+
+
+def transaction_asset_deltas(transaction: Transaction) -> list[tuple[str, Decimal]]:
+    """Signed quantity change(s) a transaction applied to the user's wallets.
+
+    Every kind but swap moves a single asset, recorded directly on `amount`.
+    A swap only writes a Transaction row for the "from" leg - the "to" leg
+    (what the other wallet gained) lives in `details`, stashed there at
+    swap time - so both legs have to be pulled from this one row.
+    """
+    if transaction.kind == "swap":
+        deltas = [(transaction.asset, as_decimal(transaction.amount))]
+        details = transaction.details or {}
+        received = details.get("received")
+        target_asset = details.get("target_asset")
+        if received is not None and target_asset:
+            deltas.append((target_asset, as_decimal(received)))
+        return deltas
+    return [(transaction.asset, as_decimal(transaction.amount))]
+
+
+def portfolio_history(
+    wallets: list[Wallet],
+    transactions: list[Transaction],
+    window_start: datetime,
+    sample_count: int,
+) -> list[Decimal]:
+    """Reconstruct total portfolio value at `sample_count` evenly spaced
+    points across [window_start, now].
+
+    Unwinds the transaction ledger backwards to get each asset's *quantity*
+    at each point in time, then prices every point at today's live rate.
+    Pricing everything on one consistent (current) basis - rather than each
+    transaction's own historical usd_value snapshot - keeps this from
+    producing nonsense like a negative portfolio value when an asset's price
+    has since moved a lot. `transactions` must be sorted ascending by
+    created_at.
+    """
+    price_by_symbol = {wallet.symbol: as_decimal(wallet.price_usd) for wallet in wallets}
+    running_balance = {wallet.symbol: as_decimal(wallet.balance) for wallet in wallets}
+    end = now()
+    if sample_count <= 1 or window_start >= end:
+        total_now = sum(
+            (running_balance[symbol] * price_by_symbol[symbol] for symbol in running_balance),
+            Decimal("0"),
+        ).quantize(Decimal("0.01"))
+        return [total_now] * max(sample_count, 1)
+    step = (end - window_start) / (sample_count - 1)
+    timestamps = [window_start + step * index for index in range(sample_count)]
+    timestamps[-1] = end
+    remaining = list(transactions)
+    values: list[Decimal] = []
+    for timestamp in reversed(timestamps):
+        while remaining and remaining[-1].created_at > timestamp:
+            for asset, delta in transaction_asset_deltas(remaining.pop()):
+                if asset in running_balance:
+                    running_balance[asset] -= delta
+        total_at_t = sum(
+            (running_balance[symbol] * price_by_symbol[symbol] for symbol in running_balance),
+            Decimal("0"),
+        ).quantize(Decimal("0.01"))
+        values.append(total_at_t)
+    values.reverse()
+    return values
+
+
 @app.get("/api/dashboard")
 async def dashboard(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> dict:
     wallet_rows = await db.scalars(
         select(Wallet).where(Wallet.user_id == user.id).order_by(Wallet.id)
     )
     wallets = list(wallet_rows.all())
-    transactions = list(
+    all_transactions = list(
         (
             await db.scalars(
                 select(Transaction)
                 .where(Transaction.user_id == user.id)
-                .order_by(Transaction.created_at.desc(), Transaction.id.desc())
-                .limit(5)
+                .order_by(Transaction.created_at, Transaction.id)
             )
         ).all()
     )
+    recent_transactions = list(reversed(all_transactions[-5:]))
     total = sum(
         (as_decimal(wallet.balance) * as_decimal(wallet.price_usd) for wallet in wallets),
         Decimal("0"),
     ).quantize(Decimal("0.01"))
-    chart_profiles = {
-        "1H": {
-            "change": "0.12",
-            "multipliers": ["0.9988", "0.9994", "0.9991", "1.0002", "0.9998", "1.0005", "1"],
-        },
-        "24H": {
-            "change": "-0.60",
-            "multipliers": [
-                "1.0060", "1.0031", "1.0040", "1.0018", "0.9989", "1.0007", "0.9978",
-                "0.9996", "0.9969", "0.9981", "0.9992", "0.9974", "1",
-            ],
-        },
-        "1W": {
-            "change": "2.84",
-            "multipliers": [
-                "0.9724", "0.9691", "0.9702", "0.9764", "0.9781", "0.9758", "0.9836",
-                "0.9874", "0.9852", "0.9786", "0.9769", "0.9818", "1",
-            ],
-        },
-        "1M": {
-            "change": "8.17",
-            "multipliers": [
-                "0.9245", "0.9318", "0.9284", "0.9427", "0.9511", "0.9473", "0.9628",
-                "0.9714", "0.9659", "0.9803", "0.9861", "0.9915", "1",
-            ],
-        },
-        "ALL": {
-            "change": "24.63",
-            "multipliers": [
-                "0.8023", "0.8248", "0.8171", "0.8516", "0.8794", "0.8712", "0.9057",
-                "0.9316", "0.9188", "0.9541", "0.9725", "0.9632", "1",
-            ],
-        },
-    }
+
+    periods = {}
+    for label, window, sample_count in PERIOD_WINDOWS:
+        window_start = user.created_at if window is None else max(user.created_at, now() - window)
+        values = portfolio_history(wallets, all_transactions, window_start, sample_count)
+        first, last = values[0], values[-1]
+        change = (
+            ((last - first) / first * 100).quantize(Decimal("0.01"))
+            if first != 0
+            else Decimal("0.00")
+        )
+        periods[label] = {"change": str(change), "values": [str(value) for value in values]}
+
     return {
         "total_balance": str(total),
-        "periods": {
-            period: {
-                "change": profile["change"],
-                "values": [
-                    str((total * Decimal(multiplier)).quantize(Decimal("0.01")))
-                    for multiplier in profile["multipliers"]
-                ],
-            }
-            for period, profile in chart_profiles.items()
-        },
+        "periods": periods,
         "wallets": [serialize_wallet(wallet) for wallet in wallets],
-        "transactions": [serialize_transaction(item) for item in transactions],
+        "transactions": [serialize_transaction(item) for item in recent_transactions],
     }
 
 
@@ -890,9 +949,9 @@ async def demo_swap(
     if as_decimal(source.balance) < amount:
         raise HTTPException(status_code=422, detail="Insufficient balance")
     usd_value = amount * as_decimal(source.price_usd)
-    target_amount = ((usd_value * Decimal("0.995")) / as_decimal(target.price_usd)).quantize(
-        MONEY_EPSILON, rounding=ROUND_DOWN
-    )
+    target_amount = (
+        (usd_value * (1 - SWAP_FEE_RATE)) / as_decimal(target.price_usd)
+    ).quantize(MONEY_EPSILON, rounding=ROUND_DOWN)
     source.balance = as_decimal(source.balance) - amount
     target.balance = as_decimal(target.balance) + target_amount
     transaction = Transaction(
@@ -903,7 +962,11 @@ async def demo_swap(
         amount=-amount,
         usd_value=usd_value.quantize(Decimal("0.01")),
         title=f"Swapped {from_symbol} to {to_symbol}",
-        details={"received": str(target_amount), "target_asset": to_symbol, "fee": "0.5%"},
+        details={
+            "received": str(target_amount),
+            "target_asset": to_symbol,
+            "fee": f"{SWAP_FEE_RATE * 100}%",
+        },
     )
     db.add(transaction)
     await db.commit()

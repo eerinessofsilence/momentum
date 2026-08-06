@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://momentum:momentum@localhost:5432/momentum"
     session_days: int = 7
     demo_mode: bool = True
+    price_refresh_enabled: bool = True
+    price_refresh_interval_seconds: int = 60
     support_email: str = "support@momentum.local"
     support_telegram: str = "@momentum_support"
     frontend_origin: str = "http://localhost:5173"
