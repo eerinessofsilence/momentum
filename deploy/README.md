@@ -55,8 +55,8 @@ which you don't want for real users.
 ## 6. Build and start the app
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml logs -f api
+docker compose up -d --build
+docker compose logs -f api
 ```
 
 Wait for the `alembic upgrade head` step to finish and uvicorn to report
@@ -93,7 +93,7 @@ from the main README, or register a real one.
 ```bash
 cd momentum
 git pull
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose up -d --build
 ```
 
 ## Once you have a domain
@@ -103,4 +103,4 @@ docker compose -f docker-compose.prod.yml up -d --build
 3. `sudo certbot --nginx -d yourdomain.example` — certbot rewrites
    `deploy/nginx.conf`'s cert paths and sets up auto-renewal for you.
 4. Update `FRONTEND_ORIGIN` in `.env` to `https://yourdomain.example` and
-   restart the `api` service: `docker compose -f docker-compose.prod.yml up -d`.
+   restart the `api` service: `docker compose up -d`.

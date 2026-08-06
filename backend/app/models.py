@@ -33,6 +33,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     profile_label: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    account_status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active", index=True
+    )
     verification_target: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     verification_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     verification_state: Mapped[str] = mapped_column(

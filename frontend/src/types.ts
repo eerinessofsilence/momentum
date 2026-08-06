@@ -1,4 +1,5 @@
 export type Theme = 'dark' | 'light'
+export type ProfileStatus = 'active' | 'suspended' | 'archived'
 
 export type User = {
   id: number
@@ -10,6 +11,7 @@ export type User = {
   sounds: boolean
   is_staff: boolean
   profile_label: string | null
+  account_status: ProfileStatus
   verification: VerificationStatus
 }
 
@@ -60,6 +62,7 @@ export type StaffClientSummary = {
   id: number
   name: string
   profile_label: string
+  account_status: ProfileStatus
   username: string
   email: string
   created_at: string

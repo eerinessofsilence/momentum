@@ -34,6 +34,24 @@ def test_login_and_seeded_dashboard(client):
     assert dashboard["periods"]["1W"]["values"][-1] == dashboard["total_balance"]
 
 
+def test_seeded_client_accounts_accept_documented_credentials(client):
+    expected_names = {
+        "mia": "Mia Warren",
+        "ethan": "Ethan Cole",
+        "nora": "Nora Hayes",
+        "marcus": "Marcus Chen",
+        "olivia": "Olivia Lane",
+    }
+    for username, name in expected_names.items():
+        response = client.post(
+            "/api/auth/login",
+            json={"username": username, "password": "Momentum123!"},
+        )
+        assert response.status_code == 200
+        assert response.json()["user"]["name"] == name
+        client.post("/api/auth/logout")
+
+
 def test_register_unique_user_and_preferences(client):
     payload = {
         "name": "Alex Morgan",
@@ -133,7 +151,7 @@ def test_staff_workspace_is_role_protected_and_operational(client):
 
     clients = client.get("/api/staff/clients").json()
     assert clients["summary"]["clients"] >= 6
-    target = clients["items"][0]
+    target = client.get("/api/staff/clients?query=%40mia").json()["items"][0]
     detail = client.get(f"/api/staff/clients/{target['id']}").json()["client"]
     before = next(wallet for wallet in detail["wallets"] if wallet["symbol"] == "USDT")
     adjusted = client.post(
@@ -151,10 +169,23 @@ def test_staff_workspace_is_role_protected_and_operational(client):
     )
     assert codes.status_code == 201
     assert len(codes.json()["items"]) == 3
+    cleared = client.delete(f"/api/staff/clients/{target['id']}/codes")
+    assert cleared.status_code == 204
+    cleared_detail = client.get(f"/api/staff/clients/{target['id']}").json()["client"]
+    assert cleared_detail["codes"] == []
     assert client.post(
         f"/api/staff/clients/{target['id']}/messages",
         json={"body": "We reviewed your account and the transfer is now confirmed."},
     ).status_code == 201
+
+    login_as_client = client.post(
+        "/api/auth/login",
+        json={"username": target["username"], "password": "Momentum123!"},
+    )
+    assert login_as_client.status_code == 200
+    client_wallets = client.get("/api/wallets").json()["items"]
+    visible_balance = next(wallet for wallet in client_wallets if wallet["symbol"] == "USDT")
+    assert float(visible_balance["balance"]) == float(after["balance"])
 
 
 def test_managed_profile_and_persistent_multi_code_transfer(client):
@@ -177,12 +208,17 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     assert payload["client"]["profile_label"] == "Olena campaign 1"
     assert payload["client"]["verification_required"] == 2
     assert len(payload["client"]["codes"]) == 2
+    assert [item["id"] for item in payload["client"]["codes"]] == sorted(
+        item["id"] for item in payload["client"]["codes"]
+    )
     assert "temporary_password" in payload
 
     search = client.get("/api/staff/clients?query=campaign%201").json()["items"]
     assert [item["id"] for item in search] == [payload["client"]["id"]]
     search_by_id = client.get(f"/api/staff/clients?query={payload['client']['id']}").json()["items"]
     assert any(item["id"] == payload["client"]["id"] for item in search_by_id)
+    search_by_username = client.get("/api/staff/clients?query=%40olena_managed_1").json()["items"]
+    assert [item["id"] for item in search_by_username] == [payload["client"]["id"]]
 
     reset = client.post(
         f"/api/staff/clients/{payload['client']['id']}/reset-password"
@@ -220,3 +256,56 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     status_payload = client.get("/api/verification/status").json()
     assert status_payload["state"] == "processing"
     assert status_payload["used"] == 2
+
+
+def test_staff_can_manage_real_profile_statuses(client):
+    client.post(
+        "/api/auth/login",
+        json={"username": "moderator", "password": "MomentumAdmin123!"},
+    )
+    created = client.post(
+        "/api/staff/clients",
+        json={
+            "profile_label": "Status test profile",
+            "name": "Status Test",
+            "username": "status_test_client",
+            "email": "status.test@example.com",
+            "required_codes": 0,
+        },
+    ).json()
+    user_id = created["client"]["id"]
+    temporary_password = created["temporary_password"]
+    assert created["client"]["account_status"] == "active"
+
+    suspended = client.patch(
+        f"/api/staff/clients/{user_id}/status",
+        json={"status": "suspended"},
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["client"]["account_status"] == "suspended"
+    blocked_login = client.post(
+        "/api/auth/login",
+        json={"username": "status_test_client", "password": temporary_password},
+    )
+    assert blocked_login.status_code == 403
+
+    client.post(
+        "/api/auth/login",
+        json={"username": "moderator", "password": "MomentumAdmin123!"},
+    )
+    archived = client.patch(
+        f"/api/staff/clients/{user_id}/status",
+        json={"status": "archived"},
+    )
+    assert archived.status_code == 200
+    assert archived.json()["client"]["account_status"] == "archived"
+    activated = client.patch(
+        f"/api/staff/clients/{user_id}/status",
+        json={"status": "active"},
+    )
+    assert activated.status_code == 200
+    assert activated.json()["client"]["account_status"] == "active"
+    assert client.post(
+        "/api/auth/login",
+        json={"username": "status_test_client", "password": temporary_password},
+    ).status_code == 200

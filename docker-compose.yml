@@ -1,49 +1,37 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: momentum
-      POSTGRES_USER: momentum
-      POSTGRES_PASSWORD: momentum
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - momentum_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U momentum -d momentum"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 3s
       timeout: 3s
       retries: 20
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://momentum:momentum@db:5432/momentum
-      DEMO_MODE: "true"
-      FRONTEND_ORIGIN: http://localhost:5173
-    ports:
-      - "8000:8000"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     volumes:
-      - ./backend:/app
+      - momentum_uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-
-  web:
-    image: node:22-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-      - momentum_node_modules:/app/node_modules
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_API_PROXY: http://api:8000
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-    depends_on:
-      - api
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 volumes:
   momentum_pgdata:
-  momentum_node_modules:
+  momentum_uploads:

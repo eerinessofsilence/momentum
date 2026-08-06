@@ -91,6 +91,10 @@ class StaffVerificationInput(BaseModel):
     required_codes: int = Field(ge=0, le=1000)
 
 
+class StaffProfileStatusInput(BaseModel):
+    status: Literal["active", "suspended", "archived"]
+
+
 class DemoTransferInput(BaseModel):
     method: Literal["card", "crypto"]
     asset: str

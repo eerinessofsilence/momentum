@@ -16,10 +16,35 @@ export function SettingsPage() {
   const [sounds, setSounds] = useState(user?.sounds ?? true)
   const [hash, setHash] = useState('')
   const [notice, setNotice] = useState('')
+  const [lookupError, setLookupError] = useState('')
+  const [lookupBusy, setLookupBusy] = useState(false)
 
   useEffect(() => { api<AppConfig>('/app-config').then(setConfig).catch(() => undefined) }, [])
   const persist = async (nextTheme: Theme, nextSounds: boolean) => { setTheme(nextTheme); setSounds(nextSounds); await setPreferences(nextTheme, nextSounds) }
-  const lookup = (event: FormEvent) => { event.preventDefault(); setNotice(hash.trim() ? `Transaction ${hash.slice(0, 14)}${hash.length > 14 ? '…' : ''} has been added to this support session.` : 'Enter a transaction hash.') }
+  const lookup = async (event: FormEvent) => {
+    event.preventDefault()
+    const transactionHash = hash.trim()
+    if (!transactionHash) {
+      setLookupError('Enter a transaction hash.')
+      return
+    }
+    setLookupBusy(true)
+    setNotice('')
+    setLookupError('')
+    try {
+      await api('/support/messages', {
+        method: 'POST',
+        body: JSON.stringify({ body: `Please review transaction: ${transactionHash}` }),
+      })
+      setHash('')
+      setNotice(`Transaction ${transactionHash.slice(0, 14)}${transactionHash.length > 14 ? '…' : ''} was sent to support.`)
+      window.dispatchEvent(new Event('momentum:data-changed'))
+    } catch (err) {
+      setLookupError((err as Error).message)
+    } finally {
+      setLookupBusy(false)
+    }
+  }
   const signOut = async () => { await logout(); navigate('/auth') }
 
   return (
@@ -44,8 +69,9 @@ export function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="Help with a transaction">
           <p className="settings-copy">Need help with a transaction? Submit its hash and Momentum Support will review the details.</p>
-          <form className="hash-form" onSubmit={lookup}><div className="hash-input"><Search size={20} /><input value={hash} onChange={(event) => setHash(event.target.value)} placeholder="Enter transaction hash" /></div><Button type="submit">Submit hash</Button></form>
+          <form className="hash-form" onSubmit={lookup}><div className="hash-input"><Search size={20} /><input value={hash} onChange={(event) => setHash(event.target.value)} placeholder="Enter transaction hash" /></div><Button type="submit" disabled={lookupBusy}>{lookupBusy ? 'Sending…' : 'Submit hash'}</Button></form>
           {notice && <Notice variant="success">{notice}</Notice>}
+          {lookupError && <Notice variant="danger">{lookupError}</Notice>}
         </SettingsSection>
         <SettingsSection title="Contact Momentum">
           <div className="contact-grid"><a href={`mailto:${config.support_email}`} className="contact-card"><span><Mail /></span><div><strong>Email</strong><small>{config.support_email}</small></div><ExternalLink size={16} /></a><a href="https://t.me/momentum_support" target="_blank" rel="noreferrer" className="contact-card"><span><AtSign /></span><div><strong>Telegram</strong><small>{config.support_telegram}</small></div><ExternalLink size={16} /></a></div>

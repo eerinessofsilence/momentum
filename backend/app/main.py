@@ -43,6 +43,7 @@ from .schemas import (
     StaffBalanceInput,
     StaffClientCreateInput,
     StaffCodeInput,
+    StaffProfileStatusInput,
     StaffVerificationInput,
     SwapInput,
     VerifyWithdrawalInput,
@@ -120,6 +121,7 @@ def serialize_user(user: User, preference: Preference | None = None) -> dict:
         "sounds": preference.sounds if preference else True,
         "is_staff": user.is_staff,
         "profile_label": user.profile_label,
+        "account_status": user.account_status,
         "verification": {
             "state": user.verification_state,
             "required": user.verification_target,
@@ -240,6 +242,8 @@ async def current_user(
     user = row.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    if user.account_status != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
     return user
 
 
@@ -318,6 +322,8 @@ async def login(
     )
     if not user or not verify_password(user.password_hash, payload.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    if user.account_status != "active":
+        raise HTTPException(status_code=403, detail="Account is not active")
     preference = await db.get(Preference, user.id)
     await issue_session(db, response, user)
     return {"user": serialize_user(user, preference)}
@@ -966,6 +972,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         "id": user.id,
         "name": user.name,
         "profile_label": user.profile_label or user.name,
+        "account_status": user.account_status,
         "username": user.username,
         "email": user.email,
         "created_at": user.created_at,
@@ -1004,7 +1011,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
             await db.scalars(
                 select(ConfirmationCode)
                 .where(ConfirmationCode.user_id == user.id)
-                .order_by(ConfirmationCode.created_at.desc(), ConfirmationCode.id.desc())
+                .order_by(ConfirmationCode.created_at, ConfirmationCode.id)
             )
         ).all()
     )
@@ -1113,6 +1120,27 @@ async def staff_update_verification(
     return {"client": await serialize_staff_client(db, client, detailed=True)}
 
 
+@app.patch("/api/staff/clients/{user_id}/status")
+async def staff_update_client_status(
+    user_id: int,
+    payload: StaffProfileStatusInput,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    client.account_status = payload.status
+    if payload.status != "active":
+        sessions = list(
+            (await db.scalars(select(Session).where(Session.user_id == client.id))).all()
+        )
+        for session in sessions:
+            await db.delete(session)
+    await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
 @app.get("/api/staff/clients")
 async def staff_clients(
     query: str = "",
@@ -1121,13 +1149,16 @@ async def staff_clients(
 ) -> dict:
     statement = select(User).where(User.is_staff.is_(False))
     if query.strip():
-        term = f"%{query.strip().lower()}%"
+        normalized_query = query.strip().lower()
+        term = f"%{normalized_query}%"
+        username_term = f"%{normalized_query.removeprefix('@')}%"
+        id_term = f"%{normalized_query.removeprefix('#')}%"
         statement = statement.where(
             or_(
-                cast(User.id, String).like(term),
+                cast(User.id, String).like(id_term),
                 func.lower(User.profile_label).like(term),
                 func.lower(User.name).like(term),
-                func.lower(User.username).like(term),
+                func.lower(User.username).like(username_term),
                 func.lower(User.email).like(term),
             )
         )

@@ -2,10 +2,10 @@
 
 Momentum is a responsive crypto-wallet interface inspired by the supplied visual references. This repository currently runs as a development environment with simulated transactions and no external blockchain, bank, exchange, or email integrations.
 
-## Quick start with Docker
+## Local Docker development
 
 ```bash
-docker-compose up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 Open [http://localhost:5173](http://localhost:5173). A development account is created automatically on first API startup:
@@ -17,6 +17,18 @@ A separate moderator account opens the Operations workspace:
 
 - Username: `moderator`
 - Password: `MomentumAdmin123!`
+
+The seeded client profiles use the same initial password, `Momentum123!`:
+
+| Client | Username |
+| --- | --- |
+| Mia Warren | `mia` |
+| Ethan Cole | `ethan` |
+| Nora Hayes | `nora` |
+| Marcus Chen | `marcus` |
+| Olivia Lane | `olivia` |
+
+If a moderator resets a client's temporary password, use the newly displayed password instead.
 
 ## Local development
 
@@ -62,9 +74,9 @@ Vite proxies `/api` and `/uploads` to FastAPI. The production frontend build can
 
 ## Production deployment
 
-See [deploy/README.md](deploy/README.md) for a Debian 12 VPS runbook using
-`docker-compose.prod.yml` (single-origin API + static frontend container,
-behind nginx for TLS).
+See [deploy/README.md](deploy/README.md) for a Debian 12 VPS runbook. The
+default `docker compose up -d --build` configuration is production-safe: it
+builds the frontend into the API image for nginx to serve as one application.
 
 ## Checks
 

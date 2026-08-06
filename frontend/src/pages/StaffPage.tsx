@@ -45,7 +45,7 @@ import {
 } from "../components/UI";
 import { assetAmount, money, timeLabel } from "../format";
 import { navigate } from "../router";
-import type { StaffClient, StaffClientSummary, Wallet } from "../types";
+import type { ProfileStatus, StaffClient, StaffClientSummary, Wallet } from "../types";
 
 type StaffSummary = {
   clients: number;
@@ -61,6 +61,20 @@ const defaultSummary: StaffSummary = {
   needs_reply: 0,
   transactions: 0
 };
+
+const profileStatusMeta: Record<
+  ProfileStatus,
+  { label: string; variant: "success" | "warning" | "neutral" }
+> = {
+  active: { label: "Active", variant: "success" },
+  suspended: { label: "Suspended", variant: "warning" },
+  archived: { label: "Archived", variant: "neutral" }
+};
+
+function ProfileStatusBadge({ status }: { status: ProfileStatus }) {
+  const meta = profileStatusMeta[status];
+  return <Badge variant={meta.variant} dot>{meta.label}</Badge>;
+}
 
 function initials(name: string) {
   return name
@@ -164,6 +178,7 @@ function AdjustBalanceModal({
   };
   return (
     <Modal title="Adjust client balance" onClose={onClose}>
+      {(close) => (
       <form className="modal-body staff-adjust-form" onSubmit={submit}>
         <div className="staff-adjust-client">
           <div className="staff-adjust-party">
@@ -199,7 +214,7 @@ function AdjustBalanceModal({
         </Field>
         {error && <Notice variant="danger">{error}</Notice>}
         <div className="modal-actions">
-          <Button onClick={onClose}>
+          <Button onClick={close}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={busy || !Number(amount)}>
@@ -207,6 +222,7 @@ function AdjustBalanceModal({
           </Button>
         </div>
       </form>
+      )}
     </Modal>
   );
 }
@@ -252,6 +268,7 @@ function CreateClientModal({
   };
   return (
     <Modal title="Create client profile" onClose={onClose}>
+      {(close) => (
       <form className="modal-body space-y-4" onSubmit={submit}>
         <Field label="Profile label"><Input value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} placeholder="Enter a profile label" autoFocus required /></Field>
         <Field label="Client name"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter the client's full name" required /></Field>
@@ -260,8 +277,9 @@ function CreateClientModal({
         <Field label="Required confirmation codes"><Input type="number" min="0" max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(0, Number(event.target.value))))} /></Field>
         <p className="fine-print">A temporary password and the requested one-time codes are generated securely. The password is shown once.</p>
         {error && <Notice variant="danger">{error}</Notice>}
-        <div className="modal-actions"><Button onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "Creating…" : "Create profile"}</Button></div>
+        <div className="modal-actions"><Button onClick={close}>Cancel</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "Creating…" : "Create profile"}</Button></div>
       </form>
+      )}
     </Modal>
   );
 }
@@ -362,6 +380,28 @@ function ClientOverview({
         { method: "POST" }
       );
       onTemporaryPassword(result.temporary_password);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const updateProfileStatus = async (nextStatus: ProfileStatus) => {
+    if (nextStatus === client.account_status) return;
+    if (
+      nextStatus !== "active" &&
+      !window.confirm(
+        `${profileStatusMeta[nextStatus].label} this profile? The client will be signed out and unable to sign in.`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/staff/clients/${client.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nextStatus })
+      });
+      await onRefresh();
+      notify(`Profile status changed to ${profileStatusMeta[nextStatus].label}`);
     } finally {
       setBusy(false);
     }
@@ -528,7 +568,7 @@ function ClientOverview({
           )}
         </Card>
         <Card variant="nested" className="staff-section-card profile-summary">
-          <CardHeader level={3} className="staff-section-title" title="Client profile" trailing={<Badge variant="success" dot>Active</Badge>} />
+          <CardHeader level={3} className="staff-section-title" title="Client profile" trailing={<ProfileStatusBadge status={client.account_status} />} />
           <dl>
             <div><dt>Profile label</dt><dd>{client.profile_label}</dd></div>
             <div>
@@ -554,7 +594,21 @@ function ClientOverview({
               <dd>#{client.id.toString().padStart(5, "0")}</dd>
             </div>
           </dl>
-          <div className="profile-actions"><Button size="small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</Button></div>
+          <div className="profile-actions">
+            <label className="profile-status-control">
+              <span>Profile status</span>
+              <Select
+                controlSize="small"
+                value={client.account_status}
+                disabled={busy}
+                onChange={(event) => updateProfileStatus(event.target.value as ProfileStatus)}>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="archived">Archived</option>
+              </Select>
+            </label>
+            <Button size="small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</Button>
+          </div>
         </Card>
       </div>
       <Card variant="nested" className="staff-section-card wallet-manager">
@@ -698,12 +752,23 @@ export function StaffPage() {
   const [adjustWallet, setAdjustWallet] = useState<Wallet | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [credentials, setCredentials] = useState<{ username: string; password: string } | null>(null);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ message: string; leaving: boolean } | null>(null);
+  const toastTimers = useRef<number[]>([]);
 
+  // Two stages: the toast is marked leaving so it can play its exit, then it
+  // unmounts once that has finished. Timers from an earlier toast are dropped
+  // so a quick second action does not cut its own toast short.
   const notify = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
+    for (const timer of toastTimers.current) window.clearTimeout(timer);
+    setToast({ message, leaving: false });
+    toastTimers.current = [
+      window.setTimeout(() => setToast((current) => (current ? { ...current, leaving: true } : null)), 2600),
+      window.setTimeout(() => setToast(null), 2800)
+    ];
   };
+  useEffect(() => () => {
+    for (const timer of toastTimers.current) window.clearTimeout(timer);
+  }, []);
   const loadClients = useCallback(async (search = "") => {
     const result = await api<{ items: StaffClientSummary[]; summary: StaffSummary }>(
       `/staff/clients${search ? `?query=${encodeURIComponent(search)}` : ""}`
@@ -816,7 +881,7 @@ export function StaffPage() {
                     controlSize="small"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search label, ID, name, email, username…"
+                    placeholder="Search clients"
                   />
                 </div>
               </div>
@@ -865,7 +930,7 @@ export function StaffPage() {
                       <div>
                         <div>
                           <h2>{client.profile_label}</h2>
-                          <Badge variant="success" dot>Active</Badge>
+                          <ProfileStatusBadge status={client.account_status} />
                         </div>
                         <p>
                           @{client.username} · {client.email}
@@ -935,7 +1000,7 @@ export function StaffPage() {
         />
       )}
       {credentials && <TemporaryPasswordModal username={credentials.username} password={credentials.password} onClose={() => setCredentials(null)} />}
-      {toast && <Notice variant="success" icon={<Check size={16} />} className="staff-toast">{toast}</Notice>}
+      {toast && <Notice variant="success" icon={<Check size={16} />} className={`staff-toast ${toast.leaving ? "is-leaving" : ""}`}>{toast.message}</Notice>}
     </div>
   );
 }

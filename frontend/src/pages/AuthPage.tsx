@@ -84,8 +84,11 @@ export function AuthPage() {
             </p>
           </div>
           <form className="auth-form" onSubmit={submit}>
+            {/* Keyed so switching modes mounts the extra fields as new nodes
+                instead of repurposing the ones already on screen — that is
+                what lets only the new field play the entrance. */}
             {mode === "register" && (
-              <Field label="Name">
+              <Field label="Name" key="name">
                 <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -95,7 +98,7 @@ export function AuthPage() {
                 />
               </Field>
             )}
-            <Field label={`Username${mode === "login" ? " or email" : ""}`}>
+            <Field label={`Username${mode === "login" ? " or email" : ""}`} key="username">
               <Input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
@@ -105,7 +108,7 @@ export function AuthPage() {
               />
             </Field>
             {mode === "register" && (
-              <Field label="Email">
+              <Field label="Email" key="email">
                 <Input
                   type="email"
                   value={email}
@@ -116,7 +119,7 @@ export function AuthPage() {
                 />
               </Field>
             )}
-            <Field label="Password">
+            <Field label="Password" key="password">
               <Input
                 type="password"
                 value={password}

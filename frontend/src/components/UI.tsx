@@ -1,7 +1,11 @@
 import {
   createElement,
   forwardRef,
+  useLayoutEffect,
+  useRef,
+  useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type HTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -164,6 +168,57 @@ export type TabItem<T extends string> = {
   indicator?: boolean;
 };
 
+type TabIndicator = { x: number; y: number; width: number; height: number };
+
+/**
+ * Measures the selected tab so a single indicator element can slide between
+ * tabs instead of the highlight jumping. Offsets are taken relative to the
+ * list's padding box — the same box the absolutely positioned indicator is
+ * placed in — so borders and padding never introduce a drift.
+ */
+function useTabIndicator(value: string, count: number) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<TabIndicator | null>(null);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const active = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!active) {
+        setIndicator(null);
+        return;
+      }
+      const listBox = list.getBoundingClientRect();
+      const activeBox = active.getBoundingClientRect();
+      const next = {
+        x: activeBox.left - listBox.left - list.clientLeft,
+        y: activeBox.top - listBox.top - list.clientTop,
+        width: activeBox.width,
+        height: activeBox.height,
+      };
+      setIndicator((current) =>
+        current &&
+        current.x === next.x &&
+        current.y === next.y &&
+        current.width === next.width &&
+        current.height === next.height
+          ? current
+          : next
+      );
+    };
+    measure();
+    // Tabs reflow when the label font loads or the viewport changes; the
+    // indicator has to follow without waiting for the next selection.
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    for (const tab of list.querySelectorAll('[role="tab"]')) observer.observe(tab);
+    return () => observer.disconnect();
+  }, [value, count]);
+
+  return { listRef, indicator };
+}
+
 export function Tabs<T extends string>({
   items,
   value,
@@ -179,11 +234,26 @@ export function Tabs<T extends string>({
   variant?: "underline" | "segmented" | "compact";
   className?: string;
 }) {
+  const { listRef, indicator } = useTabIndicator(value, items.length);
+
   return (
     <div
+      ref={listRef}
       className={cx("ui-tabs", `ui-tabs--${variant}`, className)}
       role="tablist"
       aria-label={ariaLabel}>
+      {indicator && (
+        <span
+          className="ui-tabs__indicator"
+          aria-hidden="true"
+          style={{
+            "--tab-x": `${indicator.x}px`,
+            "--tab-y": `${indicator.y}px`,
+            "--tab-w": `${indicator.width}px`,
+            "--tab-h": `${indicator.height}px`,
+          } as CSSProperties}
+        />
+      )}
       {items.map((item) => (
         <button
           type="button"

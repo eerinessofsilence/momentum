@@ -156,9 +156,13 @@ function BalanceChart({ values }: { values: string[] }) {
           <stop offset="1" stopColor="#FF2D3D" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#chart-area)" />
+      <path className="balance-chart__area" d={area} fill="url(#chart-area)" />
+      {/* Normalising the stroke to a length of 1 lets the CSS draw-in sweep it
+          with a single dashoffset keyframe, whatever shape the period has. */}
       <path
+        className="balance-chart__line"
         d={line}
+        pathLength={1}
         fill="none"
         stroke="url(#chart-line)"
         strokeWidth="4"
