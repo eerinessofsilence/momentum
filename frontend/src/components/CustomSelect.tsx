@@ -1,5 +1,6 @@
 import { Check, CaretDown as ChevronDown } from '@phosphor-icons/react'
 import { useEffect, useId, useRef, useState } from 'react'
+import type { ControlSize } from './UI'
 
 export type SelectOption = {
   value: string
@@ -11,11 +12,17 @@ export function CustomSelect({
   options,
   onChange,
   ariaLabel,
+  controlSize = 'large',
+  disabled = false,
+  className = '',
 }: {
   value: string
   options: SelectOption[]
   onChange: (value: string) => void
   ariaLabel: string
+  controlSize?: ControlSize
+  disabled?: boolean
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -41,6 +48,7 @@ export function CustomSelect({
   }, [open, selectedIndex])
 
   const choose = (index: number) => {
+    if (disabled) return
     const option = options[index]
     if (!option) return
     onChange(option.value)
@@ -82,16 +90,17 @@ export function CustomSelect({
   }
 
   return (
-    <div className={`custom-select ${open ? 'open' : ''}`} ref={rootRef} onKeyDown={handleKeyDown}>
+    <div className={`custom-select ${open ? 'open' : ''} ${className}`} ref={rootRef} onKeyDown={handleKeyDown}>
       <button
         ref={buttonRef}
         type="button"
-        className="custom-select-trigger ui-control--large"
+        className={`custom-select-trigger ui-control--${controlSize}`}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        onClick={() => setOpen((current) => !current)}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((current) => !current)}
       >
         <span>{selected?.label}</span>
         <ChevronDown className="custom-select-chevron" size={20} aria-hidden="true" />

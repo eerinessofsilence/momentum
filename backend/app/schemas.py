@@ -52,21 +52,6 @@ class SwapInput(BaseModel):
         return value
 
 
-class WithdrawalInput(BaseModel):
-    asset: str
-    amount: Decimal = Field(gt=0)
-    cardholder: str = Field(min_length=3, max_length=100)
-    card_last4: str = Field(pattern=r"^\d{4}$")
-
-
-class AuthorizeWithdrawalInput(BaseModel):
-    password: str = Field(min_length=1, max_length=128)
-
-
-class VerifyWithdrawalInput(BaseModel):
-    code: str = Field(pattern=r"^\d{6}$")
-
-
 class StaffBalanceInput(BaseModel):
     asset: str
     action: Literal["credit"] = "credit"

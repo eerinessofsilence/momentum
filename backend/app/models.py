@@ -103,33 +103,6 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
-class Withdrawal(Base):
-    __tablename__ = "withdrawals"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    asset: Mapped[str] = mapped_column(String(10))
-    amount: Mapped[Decimal] = mapped_column(Numeric(28, 8))
-    cardholder: Mapped[str] = mapped_column(String(100))
-    card_last4: Mapped[str] = mapped_column(String(4))
-    status: Mapped[str] = mapped_column(String(20), default="draft")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-
-class VerificationChallenge(Base):
-    __tablename__ = "verification_challenges"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    withdrawal_id: Mapped[int] = mapped_column(
-        ForeignKey("withdrawals.id", ondelete="CASCADE"), index=True
-    )
-    code_hash: Mapped[str] = mapped_column(String(64))
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    expires_at: Mapped[datetime] = mapped_column(DateTime)
-    used: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-
 class DemoTransfer(Base):
     __tablename__ = "demo_transfers"
 

@@ -15,21 +15,23 @@ import {
   MagnifyingGlass as Search,
   PaperPlaneTilt as Send,
   Key,
+  Password,
   Plus,
   Gear as Settings,
   ShieldCheck,
-  Sparkle as Sparkles,
+  Trash,
   Users,
   Wallet as WalletCards,
   X
 } from "@phosphor-icons/react";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { api } from "../api";
 import { copyToClipboard } from "../clipboard";
 import { Brand } from "../components/Brand";
 import { CoinIcon } from "../components/CoinIcon";
 import { Modal } from "../components/Modal";
+import { CustomSelect } from "../components/CustomSelect";
 import {
   Badge,
   Button,
@@ -39,19 +41,24 @@ import {
   Field,
   Input,
   Notice,
-  Select,
   Tabs,
   Textarea
 } from "../components/UI";
 import { assetAmount, money, timeLabel } from "../format";
 import { navigate } from "../router";
-import type { ProfileStatus, StaffClient, StaffClientSummary, Wallet } from "../types";
+import type { ConfirmationCode, ProfileStatus, StaffClient, StaffClientSummary, Wallet } from "../types";
 
 type StaffSummary = {
   clients: number;
   portfolio: string;
   needs_reply: number;
   transactions: number;
+};
+type StaffPagination = {
+  page: number;
+  page_size: number;
+  total: number;
+  pages: number;
 };
 type DetailTab = "overview" | "chat" | "activity";
 
@@ -61,6 +68,7 @@ const defaultSummary: StaffSummary = {
   needs_reply: 0,
   transactions: 0
 };
+const defaultPagination: StaffPagination = { page: 1, page_size: 25, total: 0, pages: 1 };
 
 const profileStatusMeta: Record<
   ProfileStatus,
@@ -83,6 +91,15 @@ function initials(name: string) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+/**
+ * Splits a code into groups of three for display only — the raw value is what
+ * gets copied. Moderators read these out loud, and grouped digits are markedly
+ * harder to misread or lose your place in than an unbroken run.
+ */
+function groupDigits(code: string) {
+  return code.replace(/(.{3})(?=.)/g, "$1 ");
 }
 
 function relativeTime(value: string | null) {
@@ -327,11 +344,26 @@ function ClientOverview({
 }) {
   const [codeCount, setCodeCount] = useState(3);
   const [requiredCodes, setRequiredCodes] = useState(client.verification_required);
-  const [codePage, setCodePage] = useState(1);
-  const [codesPerPage, setCodesPerPage] = useState(10);
+  const [showAllCodes, setShowAllCodes] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState<number | null>(null);
+  const copyResetTimer = useRef<number>();
   const [busy, setBusy] = useState(false);
   useEffect(() => setRequiredCodes(client.verification_required), [client.verification_required]);
-  useEffect(() => setCodePage(1), [client.id]);
+  useEffect(() => setShowAllCodes(false), [client.id]);
+  useEffect(() => () => window.clearTimeout(copyResetTimer.current), []);
+  // Confirmation lands on the tile the moderator clicked rather than in the
+  // toast at the bottom of the screen — they are reading the code, not the
+  // corner of the window.
+  const copyCode = async (item: ConfirmationCode) => {
+    try {
+      await copyToClipboard(item.code);
+      window.clearTimeout(copyResetTimer.current);
+      setCopiedCodeId(item.id);
+      copyResetTimer.current = window.setTimeout(() => setCopiedCodeId(null), 1800);
+    } catch {
+      notify("Couldn't copy the code. Please copy it manually.");
+    }
+  };
   const generate = async () => {
     setBusy(true);
     try {
@@ -340,7 +372,6 @@ function ClientOverview({
         body: JSON.stringify({ count: codeCount })
       });
       await onRefresh();
-      setCodePage(1);
       notify(`${codeCount} confirmation ${codeCount === 1 ? "code" : "codes"} generated`);
     } finally {
       setBusy(false);
@@ -359,7 +390,11 @@ function ClientOverview({
       setBusy(false);
     }
   };
-  const updateRequired = async () => {
+  // Committed on blur as well as on Enter: the previous version only applied
+  // the number through a button that appeared when it differed, so editing the
+  // field and moving on discarded the change without saying anything.
+  const commitRequired = async () => {
+    if (busy || requiredCodes === client.verification_required) return;
     setBusy(true);
     try {
       await api(`/staff/clients/${client.id}/verification`, {
@@ -367,7 +402,11 @@ function ClientOverview({
         body: JSON.stringify({ required_codes: requiredCodes })
       });
       await onRefresh();
-      notify("Required code count updated");
+      notify(
+        requiredCodes === 0
+          ? "Confirmation turned off"
+          : `Client now needs ${requiredCodes} ${requiredCodes === 1 ? "code" : "codes"}`
+      );
     } finally {
       setBusy(false);
     }
@@ -407,165 +446,145 @@ function ClientOverview({
     }
   };
   const readyCodes = client.codes.filter((item) => item.status === "ready").length;
-  const nextReadyId = client.codes.find((item) => item.status === "ready")?.id;
   const verificationConfigured = client.verification_required > 0;
   const verificationComplete =
     verificationConfigured && client.verification_used >= client.verification_required;
-  const showCodePagination = client.codes.length > codesPerPage;
-  const verificationStatus = !verificationConfigured
-    ? "Verification is not configured."
+  const requirementDirty = requiredCodes !== client.verification_required;
+  // One sentence for the state instead of the three the card used to carry
+  // (a status line, a hint under the field, and the number in the field).
+  const verificationHeadline = !verificationConfigured
+    ? "Confirmation is off"
     : verificationComplete
-      ? `Verification completed · ${client.verification_used} of ${client.verification_required} codes used.`
-      : `${client.verification_used} of ${client.verification_required} confirmation codes used.`;
-  const codePageCount = Math.max(1, Math.ceil(client.codes.length / codesPerPage));
-  const currentCodePage = Math.min(codePage, codePageCount);
-  const visibleCodes = client.codes.slice(
-    (currentCodePage - 1) * codesPerPage,
-    currentCodePage * codesPerPage
-  );
-  const codePageItems = useMemo<(number | string)[]>(() => {
-    if (codePageCount <= 7) {
-      return Array.from({ length: codePageCount }, (_, index) => index + 1);
-    }
-    const pages = Array.from(
-      new Set([1, codePageCount, currentCodePage - 1, currentCodePage, currentCodePage + 1])
-    )
-      .filter((page) => page >= 1 && page <= codePageCount)
-      .sort((left, right) => left - right);
-    const items: (number | string)[] = [];
-    pages.forEach((page, index) => {
-      if (index > 0 && page - pages[index - 1] > 1) items.push(`ellipsis-${page}`);
-      items.push(page);
-    });
-    return items;
-  }, [codePageCount, currentCodePage]);
-  useEffect(() => {
-    if (codePage > codePageCount) setCodePage(codePageCount);
-  }, [codePage, codePageCount]);
+      ? "Verification complete"
+      : `${client.verification_used} of ${client.verification_required} codes entered`;
+  const verificationHint = !verificationConfigured
+    ? "Codes exist but the client is never asked for them. Set a requirement to start."
+    : verificationComplete
+      ? "The client has entered every code this transfer needs."
+      : `${client.verification_required - client.verification_used} to go before the transfer completes.`;
+  // The first unused code is the one the moderator reads out; everything after
+  // it is a queue, and used codes are history.
+  const nextCode = client.codes.find((item) => item.status === "ready");
+  const queuedCodes = client.codes.filter((item) => item.id !== nextCode?.id);
+  const collapsedCodes = queuedCodes.slice(0, 6);
+  const visibleQueue = showAllCodes ? queuedCodes : collapsedCodes;
   return (
     <div className="staff-overview-grid">
       <div className="staff-overview-main">
         <Card variant="nested" className="staff-section-card code-manager">
-          <CardHeader level={3} className="staff-section-title" title="Confirmation codes" trailing={<Badge>{readyCodes} available</Badge>} />
-          <p>{verificationStatus}</p>
-          <div className="code-controls">
-            <label>
-              <span>Quantity</span>
+          <CardHeader
+            level={3}
+            className="staff-section-title"
+            title="Confirmation codes"
+            trailing={
+              <>
+                <Badge>{readyCodes} unused</Badge>
+                {client.codes.length > 0 && (
+                  <Button variant="ghost" size="small" className="icon-button code-clear" onClick={clear} disabled={busy} aria-label="Clear all codes" title="Clear all codes">
+                    <Trash size={16} />
+                  </Button>
+                )}
+              </>
+            }
+          />
+          <div className="code-state">
+            <div className="code-state__copy">
+              <strong>{verificationHeadline}</strong>
+              <span>{verificationHint}</span>
+            </div>
+            <label className="code-requirement">
+              <span>Codes required</span>
+              <Input
+                controlSize="small"
+                type="number"
+                min={client.verification_used}
+                max="1000"
+                value={requiredCodes}
+                disabled={busy}
+                aria-describedby={requirementDirty ? "code-requirement-hint" : undefined}
+                onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(client.verification_used, Number(event.target.value))))}
+                onBlur={commitRequired}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitRequired();
+                  }
+                  if (event.key === "Escape") setRequiredCodes(client.verification_required);
+                }}
+              />
+            </label>
+            {verificationConfigured && (
+              <progress value={client.verification_used} max={client.verification_required} aria-label="Codes entered" />
+            )}
+            {requirementDirty && (
+              <span className="code-requirement__hint" id="code-requirement-hint" role="status">
+                Not saved yet — press Enter or click away to apply.
+              </span>
+            )}
+          </div>
+          {nextCode ? (
+            <div className="code-next">
+              <div className="code-next__copy">
+                <small>Next code</small>
+                <strong>{groupDigits(nextCode.code)}</strong>
+              </div>
+              <Button size="small" onClick={() => copyCode(nextCode)} aria-label={`Copy next code ${nextCode.code}`}>
+                {copiedCodeId === nextCode.id ? <><Check size={16} /> Copied</> : <><Copy size={16} /> Copy</>}
+              </Button>
+            </div>
+          ) : (
+            <EmptyState compact className="codes-empty" icon={<ShieldCheck size={20} />} title={client.codes.length ? "Every code has been used" : "No codes yet"} />
+          )}
+          {queuedCodes.length > 0 && (
+            <div className={`code-queue ${showAllCodes ? "is-expanded" : ""}`}>
+              {visibleQueue.map((item) =>
+                item.status === "used" ? (
+                  <span className="code-chip is-used" key={item.id}>
+                    <strong>{groupDigits(item.code)}</strong>
+                    <small>Used</small>
+                  </span>
+                ) : (
+                  <button
+                    className="code-chip"
+                    key={item.id}
+                    type="button"
+                    aria-label={`Copy code ${item.code}`}
+                    title="Copy code"
+                    onClick={() => copyCode(item)}>
+                    <strong>{groupDigits(item.code)}</strong>
+                    {copiedCodeId === item.id ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                )
+              )}
+            </div>
+          )}
+          {/* One-time codes are a queue, not a table: the moderator needs the
+              next one, so the rest collapses instead of paginating. */}
+          <div className="code-footer">
+            {queuedCodes.length > collapsedCodes.length || showAllCodes ? (
+              <Button variant="ghost" size="small" className="code-more" onClick={() => setShowAllCodes((current) => !current)} aria-expanded={showAllCodes}>
+                {showAllCodes ? "Show fewer" : `Show all ${queuedCodes.length}`}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="code-generate">
+              <Button variant="primary" size="small" onClick={generate} disabled={busy}>
+                <Password size={16} /> Generate
+              </Button>
               <Input
                 controlSize="small"
                 type="number"
                 min="1"
                 max="1000"
                 value={codeCount}
-                onChange={(event) =>
-                  setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))
-                }
+                disabled={busy}
+                aria-label="Number of codes to generate"
+                onChange={(event) => setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))}
               />
-            </label>
-            <Button variant="primary" size="small" onClick={generate} disabled={busy}>
-              <Sparkles size={16} /> Generate
-            </Button>
-            {client.codes.length > 0 && (
-              <Button variant="danger" size="small" onClick={clear} disabled={busy}>
-                Clear all
-              </Button>
-            )}
-          </div>
-          <div className="code-controls verification-target-control">
-            <label><span>Required total</span><Input controlSize="small" type="number" min={client.verification_used} max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(client.verification_used, Number(event.target.value))))} /></label>
-            {requiredCodes !== client.verification_required && (
-              <Button size="small" onClick={updateRequired} disabled={busy}>Save requirement</Button>
-            )}
-            {requiredCodes === 0 && client.verification_required === 0 && (
-              <span className="verification-requirement-hint">No codes required</span>
-            )}
-          </div>
-          <div className="code-list">
-            {client.codes.length === 0 ? (
-              <EmptyState compact className="codes-empty" icon={<ShieldCheck size={20} />} title="No available codes" />
-            ) : (
-              visibleCodes.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-label={`Copy code ${item.code}`}
-                  title="Copy code"
-                  onClick={async () => {
-                    try {
-                      await copyToClipboard(item.code);
-                      notify(`${item.code} copied`);
-                    } catch {
-                      notify("Couldn't copy code. Please copy it manually.");
-                    }
-                  }}>
-                  <span>
-                    <small>
-                      {item.status === "used"
-                        ? "Used"
-                        : verificationConfigured && !verificationComplete && item.id === nextReadyId
-                          ? "Next"
-                          : verificationConfigured
-                            ? "Waiting"
-                            : "Available"}
-                    </small>
-                    <strong>{item.code}</strong>
-                  </span>
-                  <Copy size={16} />
-                </button>
-              ))
-            )}
-          </div>
-          {showCodePagination && (
-            <div className="code-pagination">
-              <label className="code-page-size">
-                <Select
-                  controlSize="small"
-                  aria-label="Codes per page"
-                  value={codesPerPage}
-                  onChange={(event) => {
-                    setCodesPerPage(Number(event.target.value));
-                    setCodePage(1);
-                  }}>
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                </Select>
-              </label>
-              <span className="code-page-summary">
-                {(currentCodePage - 1) * codesPerPage + 1}–{Math.min(currentCodePage * codesPerPage, client.codes.length)} of {client.codes.length}
-              </span>
-              <nav className="code-page-nav" aria-label="Confirmation codes pages">
-                <button
-                  type="button"
-                  aria-label="Previous codes page"
-                  disabled={currentCodePage === 1}
-                  onClick={() => setCodePage((page) => Math.max(1, page - 1))}>
-                  <CaretLeft size={16} />
-                </button>
-                {codePageItems.map((item) =>
-                  typeof item === "number" ? (
-                    <button
-                      type="button"
-                      key={item}
-                      className={item === currentCodePage ? "active" : ""}
-                      aria-current={item === currentCodePage ? "page" : undefined}
-                      onClick={() => setCodePage(item)}>
-                      {item}
-                    </button>
-                  ) : (
-                    <span key={item}>…</span>
-                  )
-                )}
-                <button
-                  type="button"
-                  aria-label="Next codes page"
-                  disabled={currentCodePage === codePageCount}
-                  onClick={() => setCodePage((page) => Math.min(codePageCount, page + 1))}>
-                  <ChevronRight size={16} />
-                </button>
-              </nav>
+              <span>{codeCount === 1 ? "code" : "codes"}</span>
             </div>
-          )}
+          </div>
         </Card>
         <Card variant="nested" className="staff-section-card profile-summary">
           <CardHeader level={3} className="staff-section-title" title="Client profile" trailing={<ProfileStatusBadge status={client.account_status} />} />
@@ -597,15 +616,19 @@ function ClientOverview({
           <div className="profile-actions">
             <label className="profile-status-control">
               <span>Profile status</span>
-              <Select
+              <CustomSelect
                 controlSize="small"
                 value={client.account_status}
+                ariaLabel="Profile status"
                 disabled={busy}
-                onChange={(event) => updateProfileStatus(event.target.value as ProfileStatus)}>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="archived">Archived</option>
-              </Select>
+                className="profile-status-select"
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "suspended", label: "Suspended" },
+                  { value: "archived", label: "Archived" }
+                ]}
+                onChange={(value) => updateProfileStatus(value as ProfileStatus)}
+              />
             </label>
             <Button size="small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</Button>
           </div>
@@ -742,6 +765,8 @@ function ClientActivity({ client }: { client: StaffClient }) {
 export function StaffPage() {
   const [clients, setClients] = useState<StaffClientSummary[]>([]);
   const [summary, setSummary] = useState<StaffSummary>(defaultSummary);
+  const [pagination, setPagination] = useState<StaffPagination>(defaultPagination);
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [client, setClient] = useState<StaffClient | null>(null);
   const [query, setQuery] = useState("");
@@ -769,12 +794,23 @@ export function StaffPage() {
   useEffect(() => () => {
     for (const timer of toastTimers.current) window.clearTimeout(timer);
   }, []);
-  const loadClients = useCallback(async (search = "") => {
-    const result = await api<{ items: StaffClientSummary[]; summary: StaffSummary }>(
-      `/staff/clients${search ? `?query=${encodeURIComponent(search)}` : ""}`
+  const loadClients = useCallback(async (search: string, requestedPage: number) => {
+    const params = new URLSearchParams({
+      page: String(requestedPage),
+      page_size: String(defaultPagination.page_size)
+    });
+    if (search) params.set("query", search);
+    const result = await api<{
+      items: StaffClientSummary[];
+      summary: StaffSummary;
+      pagination: StaffPagination;
+    }>(
+      `/staff/clients?${params.toString()}`
     );
     setClients(result.items);
     setSummary(result.summary);
+    setPagination(result.pagination);
+    setPage(result.pagination.page);
     setSelectedId((current) =>
       current && result.items.some((item) => item.id === current)
         ? current
@@ -790,33 +826,27 @@ export function StaffPage() {
     setClient(result.client);
   }, [selectedId]);
   useEffect(() => {
-    loadClients()
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false));
-  }, [loadClients]);
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => loadClients(query).catch((err) => setError((err as Error).message)),
-      240
-    );
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      loadClients(query, page)
+        .then(() => setError(""))
+        .catch((err) => setError((err as Error).message))
+        .finally(() => setLoading(false));
+    }, query ? 240 : 0);
     return () => window.clearTimeout(timer);
-  }, [query, loadClients]);
+  }, [query, page, loadClients]);
   useEffect(() => {
     loadClient().catch((err) => setError((err as Error).message));
   }, [loadClient]);
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadClient(), loadClients(query)]);
-  }, [loadClient, loadClients, query]);
+    await Promise.all([loadClient(), loadClients(query, page)]);
+  }, [loadClient, loadClients, query, page]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       refreshAll().catch((err) => setError((err as Error).message));
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [refreshAll]);
-  const currentIndex = useMemo(
-    () => clients.findIndex((item) => item.id === selectedId),
-    [clients, selectedId]
-  );
 
   return (
     <div className="staff-shell">
@@ -880,7 +910,10 @@ export function StaffPage() {
                   <Input
                     controlSize="small"
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setPage(1);
+                    }}
                     placeholder="Search clients"
                   />
                 </div>
@@ -918,6 +951,30 @@ export function StaffPage() {
                   ))
                 )}
               </div>
+              {pagination.total > 0 && (
+                <div className="client-list-pagination">
+                  <span>
+                    {(pagination.page - 1) * pagination.page_size + 1}–{Math.min(pagination.page * pagination.page_size, pagination.total)} of {pagination.total}
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      disabled={pagination.page <= 1 || loading}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      aria-label="Previous client page">
+                      <CaretLeft size={16} />
+                    </button>
+                    <small>{pagination.page} / {pagination.pages}</small>
+                    <button
+                      type="button"
+                      disabled={pagination.page >= pagination.pages || loading}
+                      onClick={() => setPage((current) => Math.min(pagination.pages, current + 1))}
+                      aria-label="Next client page">
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </aside>
             <div className="client-detail-panel">
               {!client ? (
@@ -930,7 +987,6 @@ export function StaffPage() {
                       <div>
                         <div>
                           <h2>{client.profile_label}</h2>
-                          <ProfileStatusBadge status={client.account_status} />
                         </div>
                         <p>
                           @{client.username} · {client.email}
@@ -938,9 +994,6 @@ export function StaffPage() {
                       </div>
                     </div>
                     <div className="client-position">
-                      <span>
-                        {currentIndex + 1} of {clients.length}
-                      </span>
                       <strong>{money(client.total_balance)}</strong>
                     </div>
                   </header>
@@ -982,7 +1035,7 @@ export function StaffPage() {
           onSaved={(updated) => {
             setClient(updated);
             setAdjustWallet(null);
-            loadClients(query);
+            loadClients(query, page);
             notify(`${adjustWallet.symbol} balance updated`);
           }}
         />
@@ -995,7 +1048,8 @@ export function StaffPage() {
             setClient(created);
             setSelectedId(created.id);
             setCredentials({ username: created.username, password });
-            loadClients(query);
+            setPage(1);
+            loadClients(query, 1);
           }}
         />
       )}

@@ -7,7 +7,17 @@ from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    Cookie,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,12 +36,9 @@ from .models import (
     SupportMessage,
     Transaction,
     User,
-    VerificationChallenge,
     Wallet,
-    Withdrawal,
 )
 from .schemas import (
-    AuthorizeWithdrawalInput,
     BuyInput,
     DemoCodeInput,
     DemoTransferInput,
@@ -39,15 +46,13 @@ from .schemas import (
     PreferenceInput,
     RegisterInput,
     SendInput,
-    SupportMessageInput,
     StaffBalanceInput,
     StaffClientCreateInput,
     StaffCodeInput,
     StaffProfileStatusInput,
     StaffVerificationInput,
+    SupportMessageInput,
     SwapInput,
-    VerifyWithdrawalInput,
-    WithdrawalInput,
 )
 from .security import (
     hash_password,
@@ -824,123 +829,6 @@ async def demo_swap(
     }
 
 
-@app.post("/api/withdrawals", status_code=201)
-async def create_withdrawal(
-    payload: WithdrawalInput,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    symbol = require_asset(payload.asset)
-    if payload.card_last4 != "4242":
-        raise HTTPException(status_code=422, detail="Use the development card ending in 4242")
-    wallet = await owned_wallet(db, user.id, symbol)
-    amount = as_decimal(payload.amount)
-    if as_decimal(wallet.balance) < amount:
-        raise HTTPException(status_code=422, detail="Insufficient balance")
-    withdrawal = Withdrawal(
-        user_id=user.id,
-        asset=symbol,
-        amount=amount,
-        cardholder=payload.cardholder.strip().upper(),
-        card_last4=payload.card_last4,
-        status="draft",
-    )
-    db.add(withdrawal)
-    await db.commit()
-    await db.refresh(withdrawal)
-    return {"id": withdrawal.id, "status": withdrawal.status}
-
-
-@app.post("/api/withdrawals/{withdrawal_id}/authorize")
-async def authorize_withdrawal(
-    withdrawal_id: int,
-    payload: AuthorizeWithdrawalInput,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    withdrawal = await db.scalar(
-        select(Withdrawal).where(Withdrawal.id == withdrawal_id, Withdrawal.user_id == user.id)
-    )
-    if not withdrawal:
-        raise HTTPException(status_code=404, detail="Withdrawal not found")
-    if withdrawal.status != "draft":
-        raise HTTPException(status_code=409, detail="Withdrawal has already been authorized")
-    if not verify_password(user.password_hash, payload.password):
-        raise HTTPException(status_code=401, detail="Account password is incorrect")
-    code = make_otp()
-    challenge = VerificationChallenge(
-        withdrawal_id=withdrawal.id,
-        code_hash=token_hash(code),
-        expires_at=now() + timedelta(minutes=5),
-    )
-    withdrawal.status = "verification"
-    db.add(challenge)
-    await db.commit()
-    result = {"status": withdrawal.status, "expires_in": 300}
-    if settings.demo_mode:
-        result["demo_code"] = code
-    return result
-
-
-@app.post("/api/withdrawals/{withdrawal_id}/verify")
-async def verify_withdrawal(
-    withdrawal_id: int,
-    payload: VerifyWithdrawalInput,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    withdrawal = await db.scalar(
-        select(Withdrawal)
-        .where(Withdrawal.id == withdrawal_id, Withdrawal.user_id == user.id)
-        .with_for_update()
-    )
-    if not withdrawal:
-        raise HTTPException(status_code=404, detail="Withdrawal not found")
-    if withdrawal.status != "verification":
-        raise HTTPException(status_code=409, detail="Withdrawal is not awaiting verification")
-    challenge = await db.scalar(
-        select(VerificationChallenge)
-        .where(
-            VerificationChallenge.withdrawal_id == withdrawal.id,
-            VerificationChallenge.used.is_(False),
-        )
-        .order_by(VerificationChallenge.id.desc())
-        .with_for_update()
-    )
-    if not challenge or challenge.expires_at < now():
-        raise HTTPException(status_code=410, detail="Verification code expired")
-    if challenge.attempts >= 5:
-        raise HTTPException(status_code=429, detail="Too many verification attempts")
-    if not secrets.compare_digest(challenge.code_hash, token_hash(payload.code)):
-        challenge.attempts += 1
-        await db.commit()
-        raise HTTPException(status_code=422, detail="Invalid verification code")
-    wallet = await owned_wallet(db, user.id, withdrawal.asset, lock=True)
-    amount = as_decimal(withdrawal.amount)
-    if as_decimal(wallet.balance) < amount:
-        raise HTTPException(status_code=422, detail="Insufficient balance")
-    wallet.balance = as_decimal(wallet.balance) - amount
-    withdrawal.status = "pending"
-    challenge.used = True
-    transaction = Transaction(
-        user_id=user.id,
-        kind="withdrawal",
-        status="pending",
-        asset=withdrawal.asset,
-        amount=-amount,
-        usd_value=(amount * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
-        title=f"Card withdrawal ···· {withdrawal.card_last4}",
-        details={"environment": "development", "card_last4": withdrawal.card_last4},
-    )
-    db.add(transaction)
-    await db.commit()
-    return {
-        "id": withdrawal.id,
-        "status": withdrawal.status,
-        "transaction": serialize_transaction(transaction),
-    }
-
-
 @app.get("/api/app-config")
 async def app_config() -> dict:
     return {
@@ -953,7 +841,11 @@ async def app_config() -> dict:
 
 async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = False) -> dict:
     wallets = list(
-        (await db.scalars(select(Wallet).where(Wallet.user_id == user.id).order_by(Wallet.id))).all()
+        (
+            await db.scalars(
+                select(Wallet).where(Wallet.user_id == user.id).order_by(Wallet.id)
+            )
+        ).all()
     )
     total = sum(
         (as_decimal(wallet.balance) * as_decimal(wallet.price_usd) for wallet in wallets),
@@ -1041,6 +933,32 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         }
     )
     return result
+
+
+def serialize_staff_client_summary(
+    user: User,
+    total_balance: Decimal | int,
+    transaction_count: int,
+    last_message_sender: str | None,
+    last_message_at: datetime | None,
+) -> dict:
+    return {
+        "id": user.id,
+        "name": user.name,
+        "profile_label": user.profile_label or user.name,
+        "account_status": user.account_status,
+        "username": user.username,
+        "email": user.email,
+        "created_at": user.created_at,
+        "total_balance": str(as_decimal(total_balance).quantize(Decimal("0.01"))),
+        "transaction_count": transaction_count,
+        "needs_reply": last_message_sender == "user",
+        "last_message_at": last_message_at,
+        "verification_state": user.verification_state,
+        "verification_required": user.verification_target,
+        "verification_used": user.verification_used,
+        "processing_until": utc_iso(user.processing_until),
+    }
 
 
 @app.post("/api/staff/clients", status_code=201)
@@ -1144,16 +1062,18 @@ async def staff_update_client_status(
 @app.get("/api/staff/clients")
 async def staff_clients(
     query: str = "",
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
     _: User = Depends(current_staff),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    statement = select(User).where(User.is_staff.is_(False))
+    filters = [User.is_staff.is_(False)]
     if query.strip():
         normalized_query = query.strip().lower()
         term = f"%{normalized_query}%"
         username_term = f"%{normalized_query.removeprefix('@')}%"
         id_term = f"%{normalized_query.removeprefix('#')}%"
-        statement = statement.where(
+        filters.append(
             or_(
                 cast(User.id, String).like(id_term),
                 func.lower(User.profile_label).like(term),
@@ -1162,15 +1082,94 @@ async def staff_clients(
                 func.lower(User.email).like(term),
             )
         )
-    users = list((await db.scalars(statement.order_by(User.created_at.desc(), User.id.desc()))).all())
-    items = [await serialize_staff_client(db, user) for user in users]
+
+    total = int(
+        await db.scalar(select(func.count()).select_from(User).where(*filters)) or 0
+    )
+    pages = max(1, (total + page_size - 1) // page_size)
+    resolved_page = min(page, pages)
+
+    wallet_totals = (
+        select(
+            Wallet.user_id.label("user_id"),
+            func.sum(Wallet.balance * Wallet.price_usd).label("total_balance"),
+        )
+        .group_by(Wallet.user_id)
+        .subquery()
+    )
+    transaction_totals = (
+        select(
+            Transaction.user_id.label("user_id"),
+            func.count(Transaction.id).label("transaction_count"),
+        )
+        .group_by(Transaction.user_id)
+        .subquery()
+    )
+    last_message_ids = (
+        select(
+            SupportMessage.user_id.label("user_id"),
+            func.max(SupportMessage.id).label("message_id"),
+        )
+        .group_by(SupportMessage.user_id)
+        .subquery()
+    )
+    statement = (
+        select(
+            User,
+            func.coalesce(wallet_totals.c.total_balance, 0),
+            func.coalesce(transaction_totals.c.transaction_count, 0),
+            SupportMessage.sender,
+            SupportMessage.created_at,
+        )
+        .outerjoin(wallet_totals, wallet_totals.c.user_id == User.id)
+        .outerjoin(transaction_totals, transaction_totals.c.user_id == User.id)
+        .outerjoin(last_message_ids, last_message_ids.c.user_id == User.id)
+        .outerjoin(SupportMessage, SupportMessage.id == last_message_ids.c.message_id)
+        .where(*filters)
+        .order_by(User.created_at.desc(), User.id.desc())
+        .offset((resolved_page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await db.execute(statement)).all()
+    items = [
+        serialize_staff_client_summary(
+            user, total_balance, transaction_count, last_message_sender, last_message_at
+        )
+        for user, total_balance, transaction_count, last_message_sender, last_message_at in rows
+    ]
+
+    portfolio = await db.scalar(
+        select(func.coalesce(func.sum(Wallet.balance * Wallet.price_usd), 0))
+        .select_from(User)
+        .join(Wallet, Wallet.user_id == User.id)
+        .where(*filters)
+    )
+    transaction_count = await db.scalar(
+        select(func.count(Transaction.id))
+        .select_from(User)
+        .join(Transaction, Transaction.user_id == User.id)
+        .where(*filters)
+    )
+    needs_reply = await db.scalar(
+        select(func.count())
+        .select_from(User)
+        .join(last_message_ids, last_message_ids.c.user_id == User.id)
+        .join(SupportMessage, SupportMessage.id == last_message_ids.c.message_id)
+        .where(*filters, SupportMessage.sender == "user")
+    )
     return {
         "items": items,
         "summary": {
-            "clients": len(items),
-            "portfolio": str(sum((as_decimal(item["total_balance"]) for item in items), Decimal("0"))),
-            "needs_reply": sum(1 for item in items if item["needs_reply"]),
-            "transactions": sum(item["transaction_count"] for item in items),
+            "clients": total,
+            "portfolio": str(as_decimal(portfolio or 0).quantize(Decimal("0.01"))),
+            "needs_reply": int(needs_reply or 0),
+            "transactions": int(transaction_count or 0),
+        },
+        "pagination": {
+            "page": resolved_page,
+            "page_size": page_size,
+            "total": total,
+            "pages": pages,
         },
     }
 
@@ -1257,7 +1256,17 @@ async def staff_generate_codes(
         db.add(item)
         created.append(item)
     await db.commit()
-    return {"items": [{"id": item.id, "code": item.code, "status": item.status, "created_at": item.created_at} for item in created]}
+    return {
+        "items": [
+            {
+                "id": item.id,
+                "code": item.code,
+                "status": item.status,
+                "created_at": item.created_at,
+            }
+            for item in created
+        ]
+    }
 
 
 @app.delete("/api/staff/clients/{user_id}/codes", status_code=204)
@@ -1273,12 +1282,18 @@ async def staff_clear_codes(
         )
     )
     if active_transfer:
-        raise HTTPException(status_code=409, detail="Codes cannot be cleared during an active transfer")
+        raise HTTPException(
+            status_code=409, detail="Codes cannot be cleared during an active transfer"
+        )
     client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     items = list(
-        (await db.scalars(select(ConfirmationCode).where(ConfirmationCode.user_id == user_id))).all()
+        (
+            await db.scalars(
+                select(ConfirmationCode).where(ConfirmationCode.user_id == user_id)
+            )
+        ).all()
     )
     for item in items:
         await db.delete(item)

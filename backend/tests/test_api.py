@@ -1,11 +1,3 @@
-import asyncio
-
-from sqlalchemy import select
-
-from app.db import SessionLocal
-from app.models import Withdrawal
-
-
 def test_health_and_route_protection(client):
     assert client.get("/api/health").json() == {"status": "ok", "mode": "development"}
     client.post("/api/auth/logout")
@@ -88,8 +80,8 @@ def test_support_is_persisted(authenticated_client):
     assert authenticated_client.get("/api/support/messages").json()["unread_count"] == 1
 
 
-def test_full_sandbox_withdrawal(authenticated_client):
-    draft = authenticated_client.post(
+def test_legacy_withdrawal_api_is_removed(authenticated_client):
+    assert authenticated_client.post(
         "/api/withdrawals",
         json={
             "asset": "USDT",
@@ -97,36 +89,13 @@ def test_full_sandbox_withdrawal(authenticated_client):
             "cardholder": "Demo",
             "card_last4": "4242",
         },
-    )
-    assert draft.status_code == 201
-    withdrawal_id = draft.json()["id"]
+    ).status_code == 404
     assert authenticated_client.post(
-        f"/api/withdrawals/{withdrawal_id}/authorize", json={"password": "wrong"}
-    ).status_code == 401
-    authorized = authenticated_client.post(
-        f"/api/withdrawals/{withdrawal_id}/authorize",
-        json={"password": "Momentum123!"},
-    )
-    assert authorized.status_code == 200
-    code = authorized.json()["demo_code"]
-    assert len(code) == 6
+        "/api/withdrawals/1/authorize", json={"password": "Momentum123!"}
+    ).status_code == 404
     assert authenticated_client.post(
-        f"/api/withdrawals/{withdrawal_id}/verify", json={"code": "999999"}
-    ).status_code == 422
-    verified = authenticated_client.post(
-        f"/api/withdrawals/{withdrawal_id}/verify", json={"code": code}
-    )
-    assert verified.status_code == 200
-    assert verified.json()["status"] == "pending"
-    assert verified.json()["transaction"]["amount"] == "-1E+1"
-
-    async def inspect() -> Withdrawal:
-        async with SessionLocal() as session:
-            return await session.scalar(select(Withdrawal).where(Withdrawal.id == withdrawal_id))
-
-    stored = asyncio.run(inspect())
-    assert stored.card_last4 == "4242"
-    assert not hasattr(stored, "card_number")
+        "/api/withdrawals/1/verify", json={"code": "999999"}
+    ).status_code == 404
 
 
 def test_demo_operations_reject_overdraft(authenticated_client):
@@ -151,6 +120,22 @@ def test_staff_workspace_is_role_protected_and_operational(client):
 
     clients = client.get("/api/staff/clients").json()
     assert clients["summary"]["clients"] >= 6
+    assert clients["pagination"] == {
+        "page": 1,
+        "page_size": 25,
+        "total": clients["summary"]["clients"],
+        "pages": 1,
+    }
+    first_page = client.get("/api/staff/clients?page=1&page_size=2").json()
+    second_page = client.get("/api/staff/clients?page=2&page_size=2").json()
+    assert len(first_page["items"]) == 2
+    assert len(second_page["items"]) == 2
+    assert first_page["pagination"]["total"] == clients["summary"]["clients"]
+    assert first_page["summary"] == second_page["summary"]
+    assert {item["id"] for item in first_page["items"]}.isdisjoint(
+        item["id"] for item in second_page["items"]
+    )
+    assert client.get("/api/staff/clients?page_size=101").status_code == 422
     target = client.get("/api/staff/clients?query=%40mia").json()["items"][0]
     detail = client.get(f"/api/staff/clients/{target['id']}").json()["client"]
     before = next(wallet for wallet in detail["wallets"] if wallet["symbol"] == "USDT")
@@ -233,7 +218,12 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     assert login.status_code == 200
     transfer = client.post(
         "/api/demo/transfers",
-        json={"method": "crypto", "asset": "USDT", "amount": "1", "destination": "demo_address_123"},
+        json={
+            "method": "crypto",
+            "asset": "USDT",
+            "amount": "1",
+            "destination": "demo_address_123",
+        },
     )
     assert transfer.status_code == 201
     transfer_id = transfer.json()["transfer"]["id"]

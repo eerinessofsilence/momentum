@@ -9,7 +9,6 @@ import {
   type HTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
 
@@ -47,19 +46,6 @@ export const Input = forwardRef<
     <input
       ref={ref}
       className={cx("ui-input", `ui-control--${controlSize}`, className)}
-      {...props}
-    />
-  );
-});
-
-export const Select = forwardRef<
-  HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement> & { controlSize?: ControlSize }
->(function Select({ className, controlSize = "regular", ...props }, ref) {
-  return (
-    <select
-      ref={ref}
-      className={cx("ui-select", `ui-control--${controlSize}`, className)}
       {...props}
     />
   );
