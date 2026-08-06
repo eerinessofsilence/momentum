@@ -74,7 +74,7 @@ export function SettingsPage() {
           {lookupError && <Notice variant="danger">{lookupError}</Notice>}
         </SettingsSection>
         <SettingsSection title="Contact Momentum">
-          <div className="contact-grid"><a href={`mailto:${config.support_email}`} className="contact-card"><span><Mail /></span><div><strong>Email</strong><small>{config.support_email}</small></div><ExternalLink size={16} /></a><a href="https://t.me/momentum_support" target="_blank" rel="noreferrer" className="contact-card"><span><AtSign /></span><div><strong>Telegram</strong><small>{config.support_telegram}</small></div><ExternalLink size={16} /></a></div>
+          <div className="contact-grid"><a href={`mailto:${config.support_email}`} className="contact-card"><span><Mail size={24} /></span><div><strong>Email</strong><small>{config.support_email}</small></div><ExternalLink size={16} /></a><a href="https://t.me/momentum_support" target="_blank" rel="noreferrer" className="contact-card"><span><AtSign size={24} /></span><div><strong>Telegram</strong><small>{config.support_telegram}</small></div><ExternalLink size={16} /></a></div>
         </SettingsSection>
         <div className="settings-footer"><Button variant="danger" onClick={signOut}><LogOut size={16} /> Sign out</Button><span>Momentum v{config.version}</span></div>
       </Card>

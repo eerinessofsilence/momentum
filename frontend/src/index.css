@@ -507,8 +507,8 @@ body :nth-child(n+7) { --row: 6; }
 .setting-row:last-child { border-bottom: 0; }
 .setting-row > span { display: flex; align-items: center; gap: var(--space-2); }
 .setting-row strong { color: var(--text); font-size: 14px; }
-.segmented-control { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-raised); }
-.segmented-control button { display: flex; align-items: center; gap: var(--space-1); padding: 7px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 9px; font-size: 12px; font-weight: 500; }
+.segmented-control { display: flex; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-raised); box-sizing: border-box; }
+.segmented-control button { min-height: 30px; height: 30px; display: flex; align-items: center; gap: var(--space-1); padding: 0 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 7px; font-size: 12px; font-weight: 500; }
 .segmented-control button.active { color: #fff; }
 .segmented-control .ui-tabs__indicator { border-radius: 9px; }
 /* The knob overshoots slightly on its way across and the track colour trails
