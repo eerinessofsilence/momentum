@@ -65,6 +65,7 @@ from .security import (
 from .seed import provision_user, seed_demo_user, seed_staff_workspace
 
 COOKIE_NAME = "momentum_session"
+STAFF_COOKIE_NAME = "momentum_staff_session"
 SUPPORTED_ASSETS = {"BTC", "ETH", "USDT", "TON"}
 MONEY_EPSILON = Decimal("0.00000001")
 
@@ -115,7 +116,9 @@ def require_asset(asset: str) -> str:
     return normalized
 
 
-def serialize_user(user: User, preference: Preference | None = None) -> dict:
+def serialize_user(
+    user: User, preference: Preference | None = None, *, impersonating: bool = False
+) -> dict:
     return {
         "id": user.id,
         "name": "Demo" if user.username.lower() == "demo" else user.name,
@@ -125,7 +128,7 @@ def serialize_user(user: User, preference: Preference | None = None) -> dict:
         "theme": preference.theme if preference else "dark",
         "sounds": preference.sounds if preference else True,
         "is_staff": user.is_staff,
-        "profile_label": user.profile_label,
+        "impersonating": impersonating,
         "account_status": user.account_status,
         "verification": {
             "state": user.verification_state,
@@ -262,8 +265,12 @@ async def issue_session(db: AsyncSession, response: Response, user: User) -> Non
         )
     )
     await db.commit()
+    set_session_cookie(response, COOKIE_NAME, raw_token)
+
+
+def set_session_cookie(response: Response, name: str, raw_token: str) -> None:
     response.set_cookie(
-        COOKIE_NAME,
+        name,
         raw_token,
         max_age=settings.session_days * 86400,
         httponly=True,
@@ -277,6 +284,21 @@ async def current_staff(user: User = Depends(current_user)) -> User:
     if not user.is_staff:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required")
     return user
+
+
+async def valid_staff_session(db: AsyncSession, raw_token: str | None) -> User | None:
+    if not raw_token:
+        return None
+    return await db.scalar(
+        select(User)
+        .join(Session, Session.user_id == User.id)
+        .where(
+            Session.token_hash == token_hash(raw_token),
+            Session.expires_at > now(),
+            User.is_staff.is_(True),
+            User.account_status == "active",
+        )
+    )
 
 
 async def owned_wallet(db: AsyncSession, user_id: int, symbol: str, lock: bool = False) -> Wallet:
@@ -338,24 +360,87 @@ async def login(
 async def logout(
     response: Response,
     momentum_session: str | None = Cookie(default=None),
+    momentum_staff_session: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    if momentum_session:
-        session = await db.scalar(
-            select(Session).where(Session.token_hash == token_hash(momentum_session))
+    raw_tokens = {token for token in (momentum_session, momentum_staff_session) if token}
+    if raw_tokens:
+        sessions = await db.scalars(
+            select(Session).where(
+                Session.token_hash.in_([token_hash(token) for token in raw_tokens])
+            )
         )
-        if session:
+        for session in sessions.all():
             await db.delete(session)
-            await db.commit()
+        await db.commit()
     response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(STAFF_COOKIE_NAME, path="/")
     response.status_code = 204
     return response
 
 
 @app.get("/api/auth/me")
-async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> dict:
+async def me(
+    user: User = Depends(current_user),
+    momentum_staff_session: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     preference = await db.get(Preference, user.id)
-    return {"user": serialize_user(user, preference)}
+    impersonating = not user.is_staff and bool(
+        await valid_staff_session(db, momentum_staff_session)
+    )
+    return {"user": serialize_user(user, preference, impersonating=impersonating)}
+
+
+@app.post("/api/staff/clients/{user_id}/impersonate")
+async def staff_impersonate_client(
+    user_id: int,
+    response: Response,
+    momentum_session: str | None = Cookie(default=None),
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if client.account_status != "active":
+        raise HTTPException(status_code=409, detail="Only active client profiles can be opened")
+    if not momentum_session:
+        raise HTTPException(status_code=401, detail="Staff session expired")
+
+    # Preserve the staff token only in a second HttpOnly cookie. The browser
+    # never receives a client password, and the staff session remains the sole
+    # authority that can restore the operations workspace.
+    set_session_cookie(response, STAFF_COOKIE_NAME, momentum_session)
+    preference = await db.get(Preference, client.id)
+    await issue_session(db, response, client)
+    return {"user": serialize_user(client, preference, impersonating=True)}
+
+
+@app.post("/api/auth/impersonation/exit")
+async def exit_staff_impersonation(
+    response: Response,
+    momentum_session: str | None = Cookie(default=None),
+    momentum_staff_session: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if not momentum_staff_session:
+        raise HTTPException(status_code=401, detail="No staff session to restore")
+    staff = await valid_staff_session(db, momentum_staff_session)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff session expired")
+
+    if momentum_session:
+        client_session = await db.scalar(
+            select(Session).where(Session.token_hash == token_hash(momentum_session))
+        )
+        if client_session:
+            await db.delete(client_session)
+            await db.commit()
+    set_session_cookie(response, COOKIE_NAME, momentum_staff_session)
+    response.delete_cookie(STAFF_COOKIE_NAME, path="/")
+    preference = await db.get(Preference, staff.id)
+    return {"user": serialize_user(staff, preference)}
 
 
 @app.get("/api/dashboard")
@@ -863,7 +948,6 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
     result = {
         "id": user.id,
         "name": user.name,
-        "profile_label": user.profile_label or user.name,
         "account_status": user.account_status,
         "username": user.username,
         "email": user.email,
@@ -945,7 +1029,6 @@ def serialize_staff_client_summary(
     return {
         "id": user.id,
         "name": user.name,
-        "profile_label": user.profile_label or user.name,
         "account_status": user.account_status,
         "username": user.username,
         "email": user.email,
@@ -967,12 +1050,14 @@ async def staff_create_client(
     _: User = Depends(current_staff),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    username = (payload.username or f"client_{secrets.token_hex(3)}").strip().lower()
-    email = str(payload.email).lower() if payload.email else f"{username}@momentum.local"
+    username = payload.username.strip().lower()
+    email = str(payload.email).lower()
     temporary_password = make_temporary_password()
     user = User(
         name=payload.name.strip(),
-        profile_label=payload.profile_label.strip(),
+        # Retained internally for compatibility with existing databases; the
+        # staff product uses the client's actual name as its display name.
+        profile_label=payload.name.strip(),
         username=username,
         email=email,
         password_hash=hash_password(temporary_password),
@@ -1076,7 +1161,6 @@ async def staff_clients(
         filters.append(
             or_(
                 cast(User.id, String).like(id_term),
-                func.lower(User.profile_label).like(term),
                 func.lower(User.name).like(term),
                 func.lower(User.username).like(username_term),
                 func.lower(User.email).like(term),

@@ -19,6 +19,7 @@ import {
   Plus,
   Gear as Settings,
   ShieldCheck,
+  SignIn,
   Trash,
   Users,
   Wallet as WalletCards,
@@ -46,7 +47,13 @@ import {
 } from "../components/UI";
 import { assetAmount, money, timeLabel } from "../format";
 import { navigate } from "../router";
-import type { ConfirmationCode, ProfileStatus, StaffClient, StaffClientSummary, Wallet } from "../types";
+import type {
+  ConfirmationCode,
+  ProfileStatus,
+  StaffClient,
+  StaffClientSummary,
+  Wallet
+} from "../types";
 
 type StaffSummary = {
   clients: number;
@@ -81,7 +88,11 @@ const profileStatusMeta: Record<
 
 function ProfileStatusBadge({ status }: { status: ProfileStatus }) {
   const meta = profileStatusMeta[status];
-  return <Badge variant={meta.variant} dot>{meta.label}</Badge>;
+  return (
+    <Badge variant={meta.variant} dot>
+      {meta.label}
+    </Badge>
+  );
 }
 
 function initials(name: string) {
@@ -196,49 +207,49 @@ function AdjustBalanceModal({
   return (
     <Modal title="Adjust client balance" onClose={onClose}>
       {(close) => (
-      <form className="modal-body staff-adjust-form" onSubmit={submit}>
-        <div className="staff-adjust-client">
-          <div className="staff-adjust-party">
-            <span className="staff-avatar">{initials(client.name)}</span>
-            <div>
-              <span>Client</span>
-              <strong>{client.name}</strong>
+        <form className="modal-body staff-adjust-form" onSubmit={submit}>
+          <div className="staff-adjust-client">
+            <div className="staff-adjust-party">
+              <span className="staff-avatar">{initials(client.name)}</span>
+              <div>
+                <span>Client</span>
+                <strong>{client.name}</strong>
+              </div>
+            </div>
+            <ChevronRight size={20} />
+            <div className="staff-adjust-party">
+              <CoinIcon symbol={wallet.symbol} size="sm" />
+              <div>
+                <span>Asset</span>
+                <strong>{wallet.symbol}</strong>
+              </div>
             </div>
           </div>
-          <ChevronRight size={20} />
-          <div className="staff-adjust-party">
-            <CoinIcon symbol={wallet.symbol} size="sm" />
-            <div>
-              <span>Asset</span>
-              <strong>{wallet.symbol}</strong>
+          <Field
+            label={`Amount in ${wallet.symbol}`}
+            hint={`Current balance: ${assetAmount(wallet.balance, wallet.symbol)}`}>
+            <div className="amount-field">
+              <Input
+                type="number"
+                step="any"
+                min="0"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0.00"
+                autoFocus
+                required
+              />
+              <span>{wallet.symbol}</span>
             </div>
+          </Field>
+          {error && <Notice variant="danger">{error}</Notice>}
+          <div className="modal-actions">
+            <Button onClick={close}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={busy || !Number(amount)}>
+              {busy ? "Applying…" : "Apply credit"}
+            </Button>
           </div>
-        </div>
-        <Field label={`Amount in ${wallet.symbol}`} hint={`Current balance: ${assetAmount(wallet.balance, wallet.symbol)}`}>
-          <div className="amount-field">
-            <Input
-              type="number"
-              step="any"
-              min="0"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0.00"
-              autoFocus
-              required
-            />
-            <span>{wallet.symbol}</span>
-          </div>
-        </Field>
-        {error && <Notice variant="danger">{error}</Notice>}
-        <div className="modal-actions">
-          <Button onClick={close}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={busy || !Number(amount)}>
-            {busy ? "Applying…" : "Apply credit"}
-          </Button>
-        </div>
-      </form>
+        </form>
       )}
     </Modal>
   );
@@ -251,7 +262,6 @@ function CreateClientModal({
   onClose: () => void;
   onCreated: (client: StaffClient, password: string) => void;
 }) {
-  const [profileLabel, setProfileLabel] = useState("");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -268,10 +278,9 @@ function CreateClientModal({
         {
           method: "POST",
           body: JSON.stringify({
-            profile_label: profileLabel,
             name,
-            username: username || null,
-            email: email || null,
+            username,
+            email,
             required_codes: requiredCodes
           })
         }
@@ -286,16 +295,56 @@ function CreateClientModal({
   return (
     <Modal title="Create client profile" onClose={onClose}>
       {(close) => (
-      <form className="modal-body space-y-4" onSubmit={submit}>
-        <Field label="Profile label"><Input value={profileLabel} onChange={(event) => setProfileLabel(event.target.value)} placeholder="Enter a profile label" autoFocus required /></Field>
-        <Field label="Client name"><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Enter the client's full name" required /></Field>
-        <Field label="Username" hint="Optional"><Input value={username} onChange={(event) => setUsername(event.target.value.replace(/[^A-Za-z0-9_]/g, ""))} placeholder="Leave blank to generate automatically" /></Field>
-        <Field label="Email" hint="Optional"><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Leave blank to generate automatically" /></Field>
-        <Field label="Required confirmation codes"><Input type="number" min="0" max="1000" value={requiredCodes} onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(0, Number(event.target.value))))} /></Field>
-        <p className="fine-print">A temporary password and the requested one-time codes are generated securely. The password is shown once.</p>
-        {error && <Notice variant="danger">{error}</Notice>}
-        <div className="modal-actions"><Button onClick={close}>Cancel</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "Creating…" : "Create profile"}</Button></div>
-      </form>
+        <form className="modal-body space-y-4" onSubmit={submit}>
+          <Field label="Client name">
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Enter the client's full name"
+              autoFocus
+              required
+            />
+          </Field>
+          <Field label="Username" hint="Shown as @username">
+            <Input
+              value={username}
+              onChange={(event) => setUsername(event.target.value.replace(/[^A-Za-z0-9_]/g, ""))}
+              placeholder="e.g. mia_warren"
+              required
+            />
+          </Field>
+          <Field label="Email" hint="Required contact email">
+            <Input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="mia.warren@example.com"
+              required
+            />
+          </Field>
+          <Field label="Required confirmation codes">
+            <Input
+              type="number"
+              min="0"
+              max="1000"
+              value={requiredCodes}
+              onChange={(event) =>
+                setRequiredCodes(Math.min(1000, Math.max(0, Number(event.target.value))))
+              }
+            />
+          </Field>
+          <p className="fine-print">
+            A temporary password and the requested one-time codes are generated securely. The
+            password is shown once.
+          </p>
+          {error && <Notice variant="danger">{error}</Notice>}
+          <div className="modal-actions">
+            <Button onClick={close}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "Creating…" : "Create profile"}
+            </Button>
+          </div>
+        </form>
       )}
     </Modal>
   );
@@ -319,10 +368,29 @@ function TemporaryPasswordModal({
   return (
     <Modal title="Temporary credentials" onClose={onClose}>
       <div className="modal-body space-y-4">
-        <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning"><p>This password is shown only once. Copy it before closing this window.</p></Notice>
-        <dl className="credential-card"><div><dt>Login</dt><dd>{username}</dd></div><div><dt>Temporary password</dt><dd>{password}</dd></div></dl>
+        <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning">
+          <p>This password is shown only once. Copy it before closing this window.</p>
+        </Notice>
+        <dl className="credential-card">
+          <div>
+            <dt>Login</dt>
+            <dd>{username}</dd>
+          </div>
+          <div>
+            <dt>Temporary password</dt>
+            <dd>{password}</dd>
+          </div>
+        </dl>
         <Button variant="primary" className="w-full" onClick={copy}>
-          {copied ? <><Check size={16} /> Copied</> : <><Copy size={16} /> Copy login and password</>}
+          {copied ? (
+            <>
+              <Check size={16} /> Copied
+            </>
+          ) : (
+            <>
+              <Copy size={16} /> Copy login and password
+            </>
+          )}
         </Button>
       </div>
     </Modal>
@@ -378,7 +446,9 @@ function ClientOverview({
     }
   };
   const clear = async () => {
-    if (!window.confirm("Clear all confirmation codes for this client? This action cannot be undone.")) {
+    if (
+      !window.confirm("Clear all confirmation codes for this client? This action cannot be undone.")
+    ) {
       return;
     }
     setBusy(true);
@@ -480,7 +550,14 @@ function ClientOverview({
               <>
                 <Badge>{readyCodes} unused</Badge>
                 {client.codes.length > 0 && (
-                  <Button variant="ghost" size="small" className="icon-button code-clear" onClick={clear} disabled={busy} aria-label="Clear all codes" title="Clear all codes">
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    className="icon-button code-clear"
+                    onClick={clear}
+                    disabled={busy}
+                    aria-label="Clear all codes"
+                    title="Clear all codes">
                     <Trash size={16} />
                   </Button>
                 )}
@@ -502,7 +579,11 @@ function ClientOverview({
                 value={requiredCodes}
                 disabled={busy}
                 aria-describedby={requirementDirty ? "code-requirement-hint" : undefined}
-                onChange={(event) => setRequiredCodes(Math.min(1000, Math.max(client.verification_used, Number(event.target.value))))}
+                onChange={(event) =>
+                  setRequiredCodes(
+                    Math.min(1000, Math.max(client.verification_used, Number(event.target.value)))
+                  )
+                }
                 onBlur={commitRequired}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -514,7 +595,11 @@ function ClientOverview({
               />
             </label>
             {verificationConfigured && (
-              <progress value={client.verification_used} max={client.verification_required} aria-label="Codes entered" />
+              <progress
+                value={client.verification_used}
+                max={client.verification_required}
+                aria-label="Codes entered"
+              />
             )}
             {requirementDirty && (
               <span className="code-requirement__hint" id="code-requirement-hint" role="status">
@@ -525,15 +610,30 @@ function ClientOverview({
           {nextCode ? (
             <div className="code-next">
               <div className="code-next__copy">
-                <small>Next code</small>
                 <strong>{groupDigits(nextCode.code)}</strong>
               </div>
-              <Button size="small" onClick={() => copyCode(nextCode)} aria-label={`Copy next code ${nextCode.code}`}>
-                {copiedCodeId === nextCode.id ? <><Check size={16} /> Copied</> : <><Copy size={16} /> Copy</>}
+              <Button
+                size="small"
+                onClick={() => copyCode(nextCode)}
+                aria-label={`Copy next code ${nextCode.code}`}>
+                {copiedCodeId === nextCode.id ? (
+                  <>
+                    <Check size={16} /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} /> Copy
+                  </>
+                )}
               </Button>
             </div>
           ) : (
-            <EmptyState compact className="codes-empty" icon={<ShieldCheck size={20} />} title={client.codes.length ? "Every code has been used" : "No codes yet"} />
+            <EmptyState
+              compact
+              className="codes-empty"
+              icon={<ShieldCheck size={20} />}
+              title={client.codes.length ? "Every code has been used" : "No codes yet"}
+            />
           )}
           {queuedCodes.length > 0 && (
             <div className={`code-queue ${showAllCodes ? "is-expanded" : ""}`}>
@@ -562,7 +662,12 @@ function ClientOverview({
               next one, so the rest collapses instead of paginating. */}
           <div className="code-footer">
             {queuedCodes.length > collapsedCodes.length || showAllCodes ? (
-              <Button variant="ghost" size="small" className="code-more" onClick={() => setShowAllCodes((current) => !current)} aria-expanded={showAllCodes}>
+              <Button
+                variant="ghost"
+                size="small"
+                className="code-more"
+                onClick={() => setShowAllCodes((current) => !current)}
+                aria-expanded={showAllCodes}>
                 {showAllCodes ? "Show fewer" : `Show all ${queuedCodes.length}`}
               </Button>
             ) : (
@@ -580,16 +685,26 @@ function ClientOverview({
                 value={codeCount}
                 disabled={busy}
                 aria-label="Number of codes to generate"
-                onChange={(event) => setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))}
+                onChange={(event) =>
+                  setCodeCount(Math.min(1000, Math.max(1, Number(event.target.value))))
+                }
               />
               <span>{codeCount === 1 ? "code" : "codes"}</span>
             </div>
           </div>
         </Card>
         <Card variant="nested" className="staff-section-card profile-summary">
-          <CardHeader level={3} className="staff-section-title" title="Client profile" trailing={<ProfileStatusBadge status={client.account_status} />} />
+          <CardHeader
+            level={3}
+            className="staff-section-title"
+            title="Client profile"
+            trailing={<ProfileStatusBadge status={client.account_status} />}
+          />
           <dl>
-            <div><dt>Profile label</dt><dd>{client.profile_label}</dd></div>
+            <div>
+              <dt>Client name</dt>
+              <dd>{client.name}</dd>
+            </div>
             <div>
               <dt>Username</dt>
               <dd>@{client.username}</dd>
@@ -630,12 +745,19 @@ function ClientOverview({
                 onChange={(value) => updateProfileStatus(value as ProfileStatus)}
               />
             </label>
-            <Button size="small" onClick={resetPassword} disabled={busy}><Key size={16} /> Reset temporary password</Button>
+            <Button size="small" onClick={resetPassword} disabled={busy}>
+              <Key size={16} /> Reset temporary password
+            </Button>
           </div>
         </Card>
       </div>
       <Card variant="nested" className="staff-section-card wallet-manager">
-        <CardHeader level={3} className="staff-section-title" title="Wallets & balances" trailing={<strong>{money(client.total_balance)}</strong>} />
+        <CardHeader
+          level={3}
+          className="staff-section-title"
+          title="Wallets & balances"
+          trailing={<strong>{money(client.total_balance)}</strong>}
+        />
         <div className="staff-wallet-list">
           {client.wallets.map((wallet) => (
             <article key={wallet.id}>
@@ -671,9 +793,16 @@ function ClientChat({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight });
   }, [client.messages]);
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    composer.style.height = "auto";
+    composer.style.height = `${Math.min(composer.scrollHeight, 128)}px`;
+  }, [body]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!body.trim()) return;
@@ -696,7 +825,9 @@ function ClientChat({
         <span>
           Conversation with <strong>{client.name}</strong>
         </span>
-        <Badge variant="success" dot>Client</Badge>
+        <Badge variant="success" dot>
+          Client
+        </Badge>
       </div>
       <div className="staff-chat-messages" ref={chatRef}>
         {client.messages.map((message) => (
@@ -710,9 +841,17 @@ function ClientChat({
       </div>
       <form className="staff-chat-composer" onSubmit={submit}>
         <Textarea
+          ref={composerRef}
           controlSize="regular"
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter sends the reply; Shift+Enter keeps the native textarea
+            // behavior and adds a new line for longer, structured messages.
+            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (body.trim() && !busy) event.currentTarget.form?.requestSubmit();
+          }}
           placeholder="Write a clear, helpful reply…"
           rows={1}
         />
@@ -727,7 +866,12 @@ function ClientChat({
 function ClientActivity({ client }: { client: StaffClient }) {
   return (
     <Card variant="nested" className="staff-section-card staff-activity">
-      <CardHeader level={3} className="staff-section-title" title="Recent activity" trailing={<Badge>{client.transaction_count} total</Badge>} />
+      <CardHeader
+        level={3}
+        className="staff-section-title"
+        title="Recent activity"
+        trailing={<Badge>{client.transaction_count} total</Badge>}
+      />
       <div>
         {client.transactions.map((item) => {
           const incoming = Number(item.amount) >= 0;
@@ -763,6 +907,7 @@ function ClientActivity({ client }: { client: StaffClient }) {
 }
 
 export function StaffPage() {
+  const { openClientProfile } = useAuth();
   const [clients, setClients] = useState<StaffClientSummary[]>([]);
   const [summary, setSummary] = useState<StaffSummary>(defaultSummary);
   const [pagination, setPagination] = useState<StaffPagination>(defaultPagination);
@@ -774,9 +919,12 @@ export function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
+  const [openingClient, setOpeningClient] = useState(false);
   const [adjustWallet, setAdjustWallet] = useState<Wallet | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [credentials, setCredentials] = useState<{ username: string; password: string } | null>(null);
+  const [credentials, setCredentials] = useState<{ username: string; password: string } | null>(
+    null
+  );
   const [toast, setToast] = useState<{ message: string; leaving: boolean } | null>(null);
   const toastTimers = useRef<number[]>([]);
 
@@ -787,13 +935,19 @@ export function StaffPage() {
     for (const timer of toastTimers.current) window.clearTimeout(timer);
     setToast({ message, leaving: false });
     toastTimers.current = [
-      window.setTimeout(() => setToast((current) => (current ? { ...current, leaving: true } : null)), 2600),
+      window.setTimeout(
+        () => setToast((current) => (current ? { ...current, leaving: true } : null)),
+        2600
+      ),
       window.setTimeout(() => setToast(null), 2800)
     ];
   };
-  useEffect(() => () => {
-    for (const timer of toastTimers.current) window.clearTimeout(timer);
-  }, []);
+  useEffect(
+    () => () => {
+      for (const timer of toastTimers.current) window.clearTimeout(timer);
+    },
+    []
+  );
   const loadClients = useCallback(async (search: string, requestedPage: number) => {
     const params = new URLSearchParams({
       page: String(requestedPage),
@@ -804,9 +958,7 @@ export function StaffPage() {
       items: StaffClientSummary[];
       summary: StaffSummary;
       pagination: StaffPagination;
-    }>(
-      `/staff/clients?${params.toString()}`
-    );
+    }>(`/staff/clients?${params.toString()}`);
     setClients(result.items);
     setSummary(result.summary);
     setPagination(result.pagination);
@@ -826,13 +978,16 @@ export function StaffPage() {
     setClient(result.client);
   }, [selectedId]);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      loadClients(query, page)
-        .then(() => setError(""))
-        .catch((err) => setError((err as Error).message))
-        .finally(() => setLoading(false));
-    }, query ? 240 : 0);
+    const timer = window.setTimeout(
+      () => {
+        setLoading(true);
+        loadClients(query, page)
+          .then(() => setError(""))
+          .catch((err) => setError((err as Error).message))
+          .finally(() => setLoading(false));
+      },
+      query ? 240 : 0
+    );
     return () => window.clearTimeout(timer);
   }, [query, page, loadClients]);
   useEffect(() => {
@@ -847,6 +1002,18 @@ export function StaffPage() {
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [refreshAll]);
+
+  const enterClientProfile = async () => {
+    if (!client || openingClient) return;
+    setOpeningClient(true);
+    try {
+      await openClientProfile(client.id);
+      navigate("/app/overview");
+    } catch (err) {
+      setError((err as Error).message);
+      setOpeningClient(false);
+    }
+  };
 
   return (
     <div className="staff-shell">
@@ -897,13 +1064,19 @@ export function StaffPage() {
               </div>
             </article>
           </section>
-          {error && <Notice variant="danger" className="staff-error">{error}</Notice>}
+          {error && (
+            <Notice variant="danger" className="staff-error">
+              {error}
+            </Notice>
+          )}
           <section className="staff-workspace">
             <aside className="client-list-panel">
               <div className="client-list-heading">
                 <div>
                   <h2>Clients</h2>
-                  <Button variant="primary" size="small" onClick={() => setCreateOpen(true)}><Plus size={16} /> New</Button>
+                  <Button variant="primary" size="small" onClick={() => setCreateOpen(true)}>
+                    <Plus size={16} /> New
+                  </Button>
                 </div>
                 <div className="staff-search">
                   <Search size={16} />
@@ -922,7 +1095,12 @@ export function StaffPage() {
                 {loading ? (
                   <EmptyState compact className="client-list-empty" title="Loading clients…" />
                 ) : clients.length === 0 ? (
-                  <EmptyState compact className="client-list-empty" title="No matching clients" description="Try another name, label, username, email, or ID." />
+                  <EmptyState
+                    compact
+                    className="client-list-empty"
+                    title="No matching clients"
+                    description="Try another name, username, email, or ID."
+                  />
                 ) : (
                   clients.map((item) => (
                     <button
@@ -934,7 +1112,7 @@ export function StaffPage() {
                       }}>
                       <span className="staff-avatar">{initials(item.name)}</span>
                       <span className="client-card-copy">
-                        <strong>{item.profile_label}</strong>
+                        <strong>{item.name}</strong>
                         <small>
                           @{item.username} · {relativeTime(item.last_message_at)}
                         </small>
@@ -942,10 +1120,10 @@ export function StaffPage() {
                       <span className="client-card-value">
                         <strong>{money(item.total_balance, 0)}</strong>
                         {item.needs_reply ? (
-                          <Badge variant="danger" className="reply-dot">Reply</Badge>
-                        ) : (
-                          <small>{item.transaction_count} transactions</small>
-                        )}
+                          <Badge variant="danger" className="reply-dot">
+                            Reply
+                          </Badge>
+                        ) : null}
                       </span>
                     </button>
                   ))
@@ -954,7 +1132,9 @@ export function StaffPage() {
               {pagination.total > 0 && (
                 <div className="client-list-pagination">
                   <span>
-                    {(pagination.page - 1) * pagination.page_size + 1}–{Math.min(pagination.page * pagination.page_size, pagination.total)} of {pagination.total}
+                    {(pagination.page - 1) * pagination.page_size + 1}–
+                    {Math.min(pagination.page * pagination.page_size, pagination.total)} of{" "}
+                    {pagination.total}
                   </span>
                   <div>
                     <button
@@ -964,7 +1144,9 @@ export function StaffPage() {
                       aria-label="Previous client page">
                       <CaretLeft size={16} />
                     </button>
-                    <small>{pagination.page} / {pagination.pages}</small>
+                    <small>
+                      {pagination.page} / {pagination.pages}
+                    </small>
                     <button
                       type="button"
                       disabled={pagination.page >= pagination.pages || loading}
@@ -978,7 +1160,12 @@ export function StaffPage() {
             </aside>
             <div className="client-detail-panel">
               {!client ? (
-                <EmptyState className="client-detail-empty" icon={<Users size={24} />} title="Select a client" description="Choose an account from the list to open its workspace." />
+                <EmptyState
+                  className="client-detail-empty"
+                  icon={<Users size={24} />}
+                  title="Select a client"
+                  description="Choose an account from the list to open its workspace."
+                />
               ) : (
                 <>
                   <header className="client-detail-header">
@@ -986,15 +1173,29 @@ export function StaffPage() {
                       <span className="staff-avatar large">{initials(client.name)}</span>
                       <div>
                         <div>
-                          <h2>{client.profile_label}</h2>
+                          <h2>{client.name}</h2>
                         </div>
                         <p>
                           @{client.username} · {client.email}
                         </p>
                       </div>
                     </div>
-                    <div className="client-position">
-                      <strong>{money(client.total_balance)}</strong>
+                    <div className="client-header-actions">
+                      <div className="client-position">
+                        <strong>{money(client.total_balance)}</strong>
+                      </div>
+                      <Button
+                        variant="primary"
+                        size="small"
+                        disabled={client.account_status !== "active" || openingClient}
+                        onClick={enterClientProfile}
+                        title={
+                          client.account_status !== "active"
+                            ? "Only active profiles can be opened"
+                            : undefined
+                        }>
+                        <SignIn size={16} /> {openingClient ? "Opening…" : "Open as client"}
+                      </Button>
                     </div>
                   </header>
                   <Tabs
@@ -1015,7 +1216,9 @@ export function StaffPage() {
                         onAdjust={setAdjustWallet}
                         onRefresh={refreshAll}
                         notify={notify}
-                        onTemporaryPassword={(password) => setCredentials({ username: client.username, password })}
+                        onTemporaryPassword={(password) =>
+                          setCredentials({ username: client.username, password })
+                        }
                       />
                     )}
                     {tab === "chat" && <ClientChat client={client} onRefresh={refreshAll} />}
@@ -1053,8 +1256,21 @@ export function StaffPage() {
           }}
         />
       )}
-      {credentials && <TemporaryPasswordModal username={credentials.username} password={credentials.password} onClose={() => setCredentials(null)} />}
-      {toast && <Notice variant="success" icon={<Check size={16} />} className={`staff-toast ${toast.leaving ? "is-leaving" : ""}`}>{toast.message}</Notice>}
+      {credentials && (
+        <TemporaryPasswordModal
+          username={credentials.username}
+          password={credentials.password}
+          onClose={() => setCredentials(null)}
+        />
+      )}
+      {toast && (
+        <Notice
+          variant="success"
+          icon={<Check size={16} />}
+          className={`staff-toast ${toast.leaving ? "is-leaving" : ""}`}>
+          {toast.message}
+        </Notice>
+      )}
     </div>
   );
 }

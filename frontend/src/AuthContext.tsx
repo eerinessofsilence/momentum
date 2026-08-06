@@ -10,6 +10,8 @@ type AuthValue = {
   login: (username: string, password: string) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
   logout: () => Promise<void>
+  openClientProfile: (userId: number) => Promise<void>
+  returnToStaff: () => Promise<void>
   setPreferences: (theme: Theme, sounds: boolean) => Promise<void>
 }
 
@@ -63,6 +65,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api('/auth/logout', { method: 'POST' })
       setUser(null)
       applyTheme('dark')
+    },
+    openClientProfile: async (userId) => {
+      const result = await api<{ user: User }>(`/staff/clients/${userId}/impersonate`, {
+        method: 'POST',
+      })
+      setUser(normalizeUser(result.user))
+      applyTheme(result.user.theme)
+    },
+    returnToStaff: async () => {
+      const result = await api<{ user: User }>('/auth/impersonation/exit', {
+        method: 'POST',
+      })
+      setUser(normalizeUser(result.user))
+      applyTheme(result.user.theme)
     },
     setPreferences: async (theme, sounds) => {
       await api('/preferences', { method: 'PATCH', body: JSON.stringify({ theme, sounds }) })

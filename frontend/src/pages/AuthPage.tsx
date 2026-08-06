@@ -2,6 +2,7 @@ import { Pulse as Activity, Clock as Clock3, ShieldCheck } from "@phosphor-icons
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { Brand } from "../components/Brand";
+import { HalftoneReveal } from "../components/HalftoneReveal";
 import { Button, Field, Input, Notice, Tabs } from "../components/UI";
 import { navigate } from "../router";
 
@@ -37,8 +38,21 @@ export function AuthPage() {
   return (
     <div className="auth-page">
       <section className="auth-hero">
-        <div className="auth-orb orb-one" />
-        <div className="auth-orb orb-two" />
+        <HalftoneReveal
+          className="auth-halftone"
+          src="/auth-halftone-red.webp"
+          inkColor="#110103"
+          paperColor="#57060e"
+          shape="circle"
+          dotDensity={78}
+          dotSize={0.82}
+          angle={-8}
+          contrast={1.3}
+          revealRadius={0.25}
+          edge={0.56}
+          follow={0.2}
+          idleReveal={0.05}
+        />
         <div className="auth-brand">
           <Brand />
         </div>
@@ -75,38 +89,52 @@ export function AuthPage() {
               { value: "register", label: "Create account" },
             ]}
           />
-          <div className="auth-title">
-            <h2>{mode === "login" ? "Welcome back" : "Create your wallet"}</h2>
-            <p>
-              {mode === "login"
-                ? "Sign in to access your Momentum workspace."
-                : "Create your account and set up your wallet profile."}
-            </p>
-          </div>
-          <form className="auth-form" onSubmit={submit}>
+          <div className="auth-form-content">
+            <div className="auth-title">
+              <h2>{mode === "login" ? "Welcome back" : "Create your wallet"}</h2>
+              <p>
+                {mode === "login"
+                  ? "Sign in to access your Momentum workspace."
+                  : "Create your account and set up your wallet profile."}
+              </p>
+            </div>
+            <form className="auth-form" onSubmit={submit}>
             {/* Keyed so switching modes mounts the extra fields as new nodes
                 instead of repurposing the ones already on screen — that is
                 what lets only the new field play the entrance. */}
             {mode === "register" && (
-              <Field label="Name" key="name">
+              <div className="auth-name-row" key="identity">
+                <Field label="Name">
+                  <Input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Alex Morgan"
+                    autoComplete="name"
+                    required
+                  />
+                </Field>
+                <Field label="Username">
+                  <Input
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Your username..."
+                    autoComplete="username"
+                    required
+                  />
+                </Field>
+              </div>
+            )}
+            {mode === "login" && (
+              <Field label="Username or email" key="username">
                 <Input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Alex Morgan"
-                  autoComplete="name"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Your username..."
+                  autoComplete="username"
                   required
                 />
               </Field>
             )}
-            <Field label={`Username${mode === "login" ? " or email" : ""}`} key="username">
-              <Input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Your username..."
-                autoComplete="username"
-                required
-              />
-            </Field>
             {mode === "register" && (
               <Field label="Email" key="email">
                 <Input
@@ -134,10 +162,35 @@ export function AuthPage() {
             <Button type="submit" variant="primary" size="large" className="auth-submit" disabled={busy}>
               {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create wallet"}
             </Button>
-          </form>
-          <p className="auth-help">
-            New to Momentum? <button onClick={() => setMode("register")}>Create an account</button>
-          </p>
+            </form>
+            <p className="auth-help">
+            {mode === "login" ? (
+              <>
+                New to Momentum?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("register");
+                    setError("");
+                  }}>
+                  Create an account
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setError("");
+                  }}>
+                  Sign in
+                </button>
+              </>
+            )}
+            </p>
+          </div>
         </div>
       </section>
     </div>

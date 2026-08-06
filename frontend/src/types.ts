@@ -10,7 +10,7 @@ export type User = {
   theme: Theme
   sounds: boolean
   is_staff: boolean
-  profile_label: string | null
+  impersonating: boolean
   account_status: ProfileStatus
   verification: VerificationStatus
 }
@@ -61,7 +61,6 @@ export type ActionKind = 'receive' | 'send' | 'buy' | 'swap'
 export type StaffClientSummary = {
   id: number
   name: string
-  profile_label: string
   account_status: ProfileStatus
   username: string
   email: string

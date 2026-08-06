@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#160205"/>
+      <stop offset="0.52" stop-color="#8f0c1d"/>
+      <stop offset="1" stop-color="#240307"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ff7a85" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#d71931" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="82" height="82" patternUnits="userSpaceOnUse">
+      <path d="M82 0H0V82" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1200" fill="url(#bg)"/>
+  <rect width="1600" height="1200" fill="url(#grid)"/>
+  <circle cx="1250" cy="215" r="520" fill="url(#glow)" opacity=".55"/>
+  <circle cx="180" cy="1040" r="430" fill="url(#glow)" opacity=".32"/>
+  <g fill="none" stroke="#ffd8dc" stroke-opacity=".64">
+    <circle cx="1045" cy="450" r="255" stroke-width="8"/>
+    <circle cx="1045" cy="450" r="192" stroke-width="3"/>
+    <path d="M971 288v324M1119 288v324M933 350h159c78 0 118 34 118 91 0 59-43 91-126 91H927M930 449h188" stroke-width="24" stroke-linecap="round"/>
+  </g>
+  <g fill="none" stroke="#fff" stroke-opacity=".34" stroke-width="5">
+    <path d="M-70 951C166 867 274 741 480 794s329-84 491-183 303-97 690-237"/>
+    <path d="M-80 1021C169 937 293 829 486 858s318-70 492-164 321-114 684-227"/>
+  </g>
+  <g fill="#ffd8dc">
+    <circle cx="480" cy="794" r="14"/>
+    <circle cx="971" cy="611" r="14"/>
+    <circle cx="1325" cy="462" r="14"/>
+  </g>
+  <g fill="#fff" opacity=".76">
+    <rect x="170" y="718" width="54" height="210" rx="14"/>
+    <rect x="246" y="650" width="54" height="278" rx="14"/>
+    <rect x="322" y="564" width="54" height="364" rx="14"/>
+  </g>
+</svg>

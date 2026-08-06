@@ -63,12 +63,9 @@ class StaffCodeInput(BaseModel):
 
 
 class StaffClientCreateInput(BaseModel):
-    profile_label: str = Field(min_length=1, max_length=120)
     name: str = Field(min_length=2, max_length=80)
-    username: Optional[str] = Field(
-        default=None, min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$"
-    )
-    email: Optional[EmailStr] = None
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
+    email: EmailStr
     required_codes: int = Field(default=0, ge=0, le=1000)
 
 

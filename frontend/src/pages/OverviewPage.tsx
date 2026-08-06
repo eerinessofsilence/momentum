@@ -5,6 +5,7 @@ import { useAuth } from "../AuthContext";
 import { useShell } from "../components/AppShell";
 import { LoadingPanel, PageHeading, TransactionRow, WalletRow } from "../components/PageParts";
 import { Card, CardHeader, Notice, Tabs } from "../components/UI";
+import { SpecularRim } from "../components/SpecularRim";
 import { money } from "../format";
 import type { DashboardData, DashboardPeriod } from "../types";
 
@@ -59,40 +60,48 @@ export function OverviewPage() {
             <div className="balance-content">
               <span className="balance-label">Total portfolio value</span>
               <h2>{money(data.total_balance)}</h2>
-              <span
-                className={`balance-change ${Number(data.periods[period].change) >= 0 ? "positive" : "negative"}`}
-                aria-live="polite">
-                {Number(data.periods[period].change) >= 0 ? "↑" : "↓"}{" "}
-                {Math.abs(Number(data.periods[period].change)).toFixed(2)}% · {period}
-              </span>
               <div className="quick-actions">
                 <button onClick={() => openAction("receive")}>
                   <span>
+                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <ArrowDownToLine size={24} />
                   </span>
                   <strong>Receive</strong>
                 </button>
                 <button onClick={() => openAction("send")}>
                   <span>
+                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <ArrowUpRight size={24} />
                   </span>
                   <strong>Send</strong>
                 </button>
                 <button onClick={() => openAction("buy")}>
                   <span>
+                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <CircleDollarSign size={24} />
                   </span>
                   <strong>Buy</strong>
                 </button>
                 <button onClick={() => openAction("swap")}>
                   <span>
+                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <RefreshCw size={24} />
                   </span>
                   <strong>Swap</strong>
                 </button>
               </div>
+              <span
+                className={`balance-change ${Number(data.periods[period].change) >= 0 ? "positive" : "negative"}`}
+                aria-live="polite">
+                {Number(data.periods[period].change) >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(Number(data.periods[period].change)).toFixed(2)}% · {period}
+              </span>
             </div>
-            <BalanceChart key={period} values={data.periods[period].values} />
+            <BalanceChart
+              key={period}
+              values={data.periods[period].values}
+              positive={Number(data.periods[period].change) >= 0}
+            />
             <Tabs
               className="period-switcher"
               variant="compact"
@@ -126,19 +135,22 @@ export function OverviewPage() {
   );
 }
 
-function BalanceChart({ values }: { values: string[] }) {
+function BalanceChart({ values, positive }: { values: string[]; positive: boolean }) {
   const width = 1200;
   const height = 190;
   const numbers = values.map(Number);
   const min = Math.min(...numbers);
   const max = Math.max(...numbers);
   const points = numbers.map((value, index) => {
-    const x = (index / Math.max(1, numbers.length - 1)) * width;
+    const isLast = index === numbers.length - 1;
+    const x = isLast ? width + 8 : (index / Math.max(1, numbers.length - 1)) * width;
     const y = height - 24 - ((value - min) / Math.max(1, max - min)) * 115;
     return [x, y];
   });
-  const line = points.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x} ${y}`).join(" ");
+  const line = smoothChartPath(points);
   const area = `${line} L ${width} ${height} L 0 ${height} Z`;
+  const lineColor = positive ? "#45D6A1" : "#E54856";
+  const areaColor = positive ? "#24C48C" : "#FF2D3D";
   return (
     <svg
       className="balance-chart"
@@ -146,28 +158,45 @@ function BalanceChart({ values }: { values: string[] }) {
       preserveAspectRatio="none"
       aria-label="Portfolio value chart">
       <defs>
-        <linearGradient id="chart-line" x1="0" y1="0" x2="1" y2="0">
-          <stop stopColor="#FF8A94" />
-          <stop offset="0.5" stopColor="#FF2D3D" />
-          <stop offset="1" stopColor="#9F0D20" />
-        </linearGradient>
         <linearGradient id="chart-area" x1="0" y1="0" x2="0" y2="1">
-          <stop stopColor="#FF2D3D" stopOpacity=".35" />
-          <stop offset="1" stopColor="#FF2D3D" stopOpacity="0" />
+          <stop stopColor={areaColor} stopOpacity={positive ? ".26" : ".35"} />
+          <stop offset="1" stopColor={areaColor} stopOpacity="0" />
         </linearGradient>
       </defs>
       <path className="balance-chart__area" d={area} fill="url(#chart-area)" />
-      {/* Normalising the stroke to a length of 1 lets the CSS draw-in sweep it
-          with a single dashoffset keyframe, whatever shape the period has. */}
       <path
         className="balance-chart__line"
         d={line}
-        pathLength={1}
         fill="none"
-        stroke="url(#chart-line)"
+        stroke={lineColor}
         strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
+}
+
+function smoothChartPath(points: number[][]) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0][0]} ${points[0][1]}`;
+
+  const tension = 0.72;
+  let path = `M ${points[0][0]} ${points[0][1]}`;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[Math.max(0, index - 1)];
+    const current = points[index];
+    const next = points[index + 1];
+    const following = points[Math.min(points.length - 1, index + 2)];
+    const firstControlX = current[0] + ((next[0] - previous[0]) * tension) / 6;
+    const firstControlY = current[1] + ((next[1] - previous[1]) * tension) / 6;
+    const secondControlX = next[0] - ((following[0] - current[0]) * tension) / 6;
+    const secondControlY = next[1] - ((following[1] - current[1]) * tension) / 6;
+
+    path += ` C ${firstControlX} ${firstControlY}, ${secondControlX} ${secondControlY}, ${next[0]} ${next[1]}`;
+  }
+
+  return path;
 }

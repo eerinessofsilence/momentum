@@ -1,5 +1,6 @@
 import {
   Question as CircleHelp,
+  ArrowLeft,
   ClockCounterClockwise as Clock3,
   SquaresFour as LayoutDashboard,
   SignOut as LogOut,
@@ -37,11 +38,12 @@ const navigation = [
 ]
 
 export function AppShell({ path, children }: { path: string; children: ReactNode }) {
-  const { user, logout } = useAuth()
+  const { user, logout, returnToStaff } = useAuth()
   const [mobileMenu, setMobileMenu] = useState(false)
   const [action, setAction] = useState<{ kind: ActionKind; symbol?: string } | null>(null)
   const [supportUnread, setSupportUnread] = useState(0)
   const [verification, setVerification] = useState<VerificationStatus | null>(null)
+  const [returningToStaff, setReturningToStaff] = useState(false)
 
   const refreshSupportUnread = useCallback(() => {
     if (path === '/app/support') {
@@ -87,6 +89,17 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
     navigate('/auth')
   }
 
+  const exitClientProfile = async () => {
+    if (returningToStaff) return
+    setReturningToStaff(true)
+    try {
+      await returnToStaff()
+      navigate('/staff')
+    } finally {
+      setReturningToStaff(false)
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="mobile-header">
@@ -119,6 +132,7 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
             </div>
           )}
           <div className="profile-card"><span className="avatar">{user?.name.slice(0, 1).toUpperCase()}</span><div><strong>{user?.name}</strong><small>@{user?.username}</small></div></div>
+          {user?.impersonating && <button className="return-staff-button" disabled={returningToStaff} onClick={exitClientProfile}><ArrowLeft size={20} /> {returningToStaff ? 'Returning…' : 'Return to Operations'}</button>}
           <button className="signout-button" onClick={signOut}><LogOut size={20} /> Sign out</button>
         </div>
       </aside>

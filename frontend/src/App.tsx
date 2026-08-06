@@ -25,13 +25,11 @@ function ProtectedShell({ path }: { path: string }) {
   const Page = pages[path] || OverviewPage
   useEffect(() => {
     if (!loading && !user) navigate('/auth', true)
+    else if (!loading && user?.is_staff) navigate('/staff', true)
   }, [loading, user])
   if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label="Loading Momentum" /><p>Loading Momentum…</p></div>
   if (!user) return null
-  if (user.is_staff) {
-    navigate('/staff', true)
-    return null
-  }
+  if (user.is_staff) return null
   return <AppShell path={path}><Page /></AppShell>
 }
 

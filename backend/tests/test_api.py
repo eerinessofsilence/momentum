@@ -173,15 +173,55 @@ def test_staff_workspace_is_role_protected_and_operational(client):
     assert float(visible_balance["balance"]) == float(after["balance"])
 
 
+def test_staff_can_open_client_profile_and_return_without_password(client):
+    client.post("/api/auth/logout")
+    staff_login = client.post(
+        "/api/auth/login",
+        json={"username": "moderator", "password": "MomentumAdmin123!"},
+    )
+    assert staff_login.status_code == 200
+
+    target = client.get("/api/staff/clients?query=%40mia").json()["items"][0]
+    opened = client.post(f"/api/staff/clients/{target['id']}/impersonate")
+    assert opened.status_code == 200
+    assert opened.json()["user"]["username"] == target["username"]
+    assert opened.json()["user"]["is_staff"] is False
+    assert opened.json()["user"]["impersonating"] is True
+
+    # The active cookie now has client permissions, while a reload still knows
+    # that the protected staff session can be restored.
+    assert client.get("/api/staff/clients").status_code == 403
+    me = client.get("/api/auth/me").json()["user"]
+    assert me["username"] == target["username"]
+    assert me["impersonating"] is True
+
+    restored = client.post("/api/auth/impersonation/exit")
+    assert restored.status_code == 200
+    assert restored.json()["user"]["username"] == "moderator"
+    assert restored.json()["user"]["is_staff"] is True
+    assert restored.json()["user"]["impersonating"] is False
+    assert client.get("/api/staff/clients").status_code == 200
+    assert client.post("/api/auth/impersonation/exit").status_code == 401
+
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username": "demo", "password": "Momentum123!"})
+    assert client.post(f"/api/staff/clients/{target['id']}/impersonate").status_code == 403
+    assert client.post("/api/auth/impersonation/exit").status_code == 401
+
+
 def test_managed_profile_and_persistent_multi_code_transfer(client):
     client.post(
         "/api/auth/login",
         json={"username": "moderator", "password": "MomentumAdmin123!"},
     )
+    missing_identity_fields = client.post(
+        "/api/staff/clients",
+        json={"name": "Incomplete profile"},
+    )
+    assert missing_identity_fields.status_code == 422
     created = client.post(
         "/api/staff/clients",
         json={
-            "profile_label": "Olena campaign 1",
             "name": "Olena",
             "username": "olena_managed_1",
             "email": "olena.managed.1@example.com",
@@ -190,7 +230,7 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     )
     assert created.status_code == 201
     payload = created.json()
-    assert payload["client"]["profile_label"] == "Olena campaign 1"
+    assert payload["client"]["name"] == "Olena"
     assert payload["client"]["verification_required"] == 2
     assert len(payload["client"]["codes"]) == 2
     assert [item["id"] for item in payload["client"]["codes"]] == sorted(
@@ -198,7 +238,7 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     )
     assert "temporary_password" in payload
 
-    search = client.get("/api/staff/clients?query=campaign%201").json()["items"]
+    search = client.get("/api/staff/clients?query=olena").json()["items"]
     assert [item["id"] for item in search] == [payload["client"]["id"]]
     search_by_id = client.get(f"/api/staff/clients?query={payload['client']['id']}").json()["items"]
     assert any(item["id"] == payload["client"]["id"] for item in search_by_id)
@@ -256,7 +296,6 @@ def test_staff_can_manage_real_profile_statuses(client):
     created = client.post(
         "/api/staff/clients",
         json={
-            "profile_label": "Status test profile",
             "name": "Status Test",
             "username": "status_test_client",
             "email": "status.test@example.com",
