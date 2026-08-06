@@ -2,6 +2,7 @@ import {
   Pulse as Activity,
   ArrowDownLeft,
   ArrowUpRight,
+  CaretLeft,
   Check,
   CaretRight as ChevronRight,
   CurrencyDollar as CircleDollarSign,
@@ -301,8 +302,11 @@ function ClientOverview({
 }) {
   const [codeCount, setCodeCount] = useState(3);
   const [requiredCodes, setRequiredCodes] = useState(client.verification_required);
+  const [codePage, setCodePage] = useState(1);
+  const [codesPerPage, setCodesPerPage] = useState(10);
   const [busy, setBusy] = useState(false);
   useEffect(() => setRequiredCodes(client.verification_required), [client.verification_required]);
+  useEffect(() => setCodePage(1), [client.id]);
   const generate = async () => {
     setBusy(true);
     try {
@@ -311,6 +315,7 @@ function ClientOverview({
         body: JSON.stringify({ count: codeCount })
       });
       await onRefresh();
+      setCodePage(1);
       notify(`${codeCount} confirmation ${codeCount === 1 ? "code" : "codes"} generated`);
     } finally {
       setBusy(false);
@@ -355,6 +360,31 @@ function ClientOverview({
   const nextReadyId = client.codes
     .filter((item) => item.status === "ready")
     .sort((left, right) => left.id - right.id)[0]?.id;
+  const codePageCount = Math.max(1, Math.ceil(client.codes.length / codesPerPage));
+  const currentCodePage = Math.min(codePage, codePageCount);
+  const visibleCodes = client.codes.slice(
+    (currentCodePage - 1) * codesPerPage,
+    currentCodePage * codesPerPage
+  );
+  const codePageItems = useMemo<(number | string)[]>(() => {
+    if (codePageCount <= 7) {
+      return Array.from({ length: codePageCount }, (_, index) => index + 1);
+    }
+    const pages = Array.from(
+      new Set([1, codePageCount, currentCodePage - 1, currentCodePage, currentCodePage + 1])
+    )
+      .filter((page) => page >= 1 && page <= codePageCount)
+      .sort((left, right) => left - right);
+    const items: (number | string)[] = [];
+    pages.forEach((page, index) => {
+      if (index > 0 && page - pages[index - 1] > 1) items.push(`ellipsis-${page}`);
+      items.push(page);
+    });
+    return items;
+  }, [codePageCount, currentCodePage]);
+  useEffect(() => {
+    if (codePage > codePageCount) setCodePage(codePageCount);
+  }, [codePage, codePageCount]);
   return (
     <div className="staff-overview-grid">
       <div className="staff-overview-main">
@@ -437,7 +467,7 @@ function ClientOverview({
                 <span>No active codes</span>
               </div>
             ) : (
-              client.codes.map((item) => (
+              visibleCodes.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => {
@@ -453,6 +483,56 @@ function ClientOverview({
               ))
             )}
           </div>
+          {client.codes.length > 0 && (
+            <div className="code-pagination">
+              <label className="code-page-size">
+                <span>Show</span>
+                <select
+                  value={codesPerPage}
+                  onChange={(event) => {
+                    setCodesPerPage(Number(event.target.value));
+                    setCodePage(1);
+                  }}>
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </label>
+              <span className="code-page-summary">
+                {(currentCodePage - 1) * codesPerPage + 1}–{Math.min(currentCodePage * codesPerPage, client.codes.length)} of {client.codes.length}
+              </span>
+              <nav className="code-page-nav" aria-label="Confirmation codes pages">
+                <button
+                  type="button"
+                  aria-label="Previous codes page"
+                  disabled={currentCodePage === 1}
+                  onClick={() => setCodePage((page) => Math.max(1, page - 1))}>
+                  <CaretLeft size={14} />
+                </button>
+                {codePageItems.map((item) =>
+                  typeof item === "number" ? (
+                    <button
+                      type="button"
+                      key={item}
+                      className={item === currentCodePage ? "active" : ""}
+                      aria-current={item === currentCodePage ? "page" : undefined}
+                      onClick={() => setCodePage(item)}>
+                      {item}
+                    </button>
+                  ) : (
+                    <span key={item}>…</span>
+                  )
+                )}
+                <button
+                  type="button"
+                  aria-label="Next codes page"
+                  disabled={currentCodePage === codePageCount}
+                  onClick={() => setCodePage((page) => Math.min(codePageCount, page + 1))}>
+                  <ChevronRight size={14} />
+                </button>
+              </nav>
+            </div>
+          )}
         </section>
       </div>
       <section className="staff-section-card wallet-manager">
