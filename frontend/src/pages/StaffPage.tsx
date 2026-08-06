@@ -27,6 +27,7 @@ import {
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { api } from "../api";
+import { copyToClipboard } from "../clipboard";
 import { Brand } from "../components/Brand";
 import { CoinIcon } from "../components/CoinIcon";
 import { Modal } from "../components/Modal";
@@ -173,24 +174,22 @@ function AdjustBalanceModal({
     <Modal title="Adjust client balance" onClose={onClose}>
       <form className="modal-body staff-adjust-form" onSubmit={submit}>
         <div className="staff-adjust-client">
-          <span className="staff-avatar">{initials(client.name)}</span>
-          <div>
-            <span>Client</span>
-            <strong>{client.name}</strong>
+          <div className="staff-adjust-party">
+            <span className="staff-avatar">{initials(client.name)}</span>
+            <div>
+              <span>Client</span>
+              <strong>{client.name}</strong>
+            </div>
           </div>
           <ChevronRight size={20} />
-          <CoinIcon symbol={wallet.symbol} size="sm" />
-          <div>
-            <span>Asset</span>
-            <strong>{wallet.symbol}</strong>
+          <div className="staff-adjust-party">
+            <CoinIcon symbol={wallet.symbol} size="sm" />
+            <div>
+              <span>Asset</span>
+              <strong>{wallet.symbol}</strong>
+            </div>
           </div>
         </div>
-        <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning">
-          <p>
-            This creates an auditable credit transaction. Moderator accounts cannot debit clients.
-          </p>
-        </Notice>
-        <div className="staff-segmented"><button type="button" className="active"><ArrowDownLeft size={16} /> Credit only</button></div>
         <Field label={`Amount in ${wallet.symbol}`} hint={`Current balance: ${assetAmount(wallet.balance, wallet.symbol)}`}>
           <div className="amount-field">
             <Input
@@ -284,13 +283,20 @@ function TemporaryPasswordModal({
   password: string;
   onClose: () => void;
 }) {
-  const copy = async () => navigator.clipboard.writeText(`Login: ${username}\nPassword: ${password}`);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await copyToClipboard(`Login: ${username}\nPassword: ${password}`);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2200);
+  };
   return (
     <Modal title="Temporary credentials" onClose={onClose}>
       <div className="modal-body space-y-4">
         <Notice variant="warning" icon={<ShieldCheck size={20} />} className="adjust-warning"><p>This password is shown only once. Copy it before closing this window.</p></Notice>
         <dl className="credential-card"><div><dt>Login</dt><dd>{username}</dd></div><div><dt>Temporary password</dt><dd>{password}</dd></div></dl>
-        <Button variant="primary" className="w-full" onClick={copy}><Copy size={16} /> Copy login and password</Button>
+        <Button variant="primary" className="w-full" onClick={copy}>
+          {copied ? <><Check size={16} /> Copied</> : <><Copy size={16} /> Copy login and password</>}
+        </Button>
       </div>
     </Modal>
   );
@@ -452,9 +458,13 @@ function ClientOverview({
                   type="button"
                   aria-label={`Copy code ${item.code}`}
                   title="Copy code"
-                  onClick={() => {
-                    navigator.clipboard.writeText(item.code);
-                    notify(`${item.code} copied`);
+                  onClick={async () => {
+                    try {
+                      await copyToClipboard(item.code);
+                      notify(`${item.code} copied`);
+                    } catch {
+                      notify("Couldn't copy code. Please copy it manually.");
+                    }
                   }}>
                   <span>
                     <small>
@@ -740,6 +750,12 @@ export function StaffPage() {
   const refreshAll = useCallback(async () => {
     await Promise.all([loadClient(), loadClients(query)]);
   }, [loadClient, loadClients, query]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refreshAll().catch((err) => setError((err as Error).message));
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [refreshAll]);
   const currentIndex = useMemo(
     () => clients.findIndex((item) => item.id === selectedId),
     [clients, selectedId]
@@ -842,9 +858,9 @@ export function StaffPage() {
                       <span className="client-card-value">
                         <strong>{money(item.total_balance, 0)}</strong>
                         {item.needs_reply ? (
-                          <Badge variant="danger" dot className="reply-dot">Reply</Badge>
+                          <Badge variant="danger" className="reply-dot">Reply</Badge>
                         ) : (
-                          <small>{item.transaction_count} txns</small>
+                          <small>{item.transaction_count} transactions</small>
                         )}
                       </span>
                     </button>
@@ -884,7 +900,7 @@ export function StaffPage() {
                     onChange={setTab}
                     items={[
                       { value: "overview", label: "Overview", icon: <WalletCards size={16} /> },
-                      { value: "chat", label: "Conversation", icon: <MessageCircle size={16} />, indicator: client.needs_reply },
+                      { value: "chat", label: "Conversation", icon: <MessageCircle size={16} /> },
                       { value: "activity", label: "Activity", icon: <Clock3 size={16} /> }
                     ]}
                   />

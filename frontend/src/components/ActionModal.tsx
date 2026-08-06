@@ -13,6 +13,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
+import { copyToClipboard } from '../clipboard'
 import { assetAmount, shortAddress } from '../format'
 import type { ActionKind, DemoTransfer, Wallet } from '../types'
 import { CoinIcon } from './CoinIcon'
@@ -106,7 +107,7 @@ export function ActionModal({
         <div className="modal-body space-y-5">
           {selected && <div className="asset-highlight"><CoinIcon symbol={selected.symbol} /><div><strong>{selected.name}</strong><span>{selected.network} · {selected.symbol}</span></div></div>}
           <Field label="Coin"><CustomSelect ariaLabel="Coin" value={symbol} onChange={setSymbol} options={wallets.map((wallet) => ({ value: wallet.symbol, label: `${wallet.name} (${wallet.symbol})` }))} /></Field>
-          {selected && <><div className="qr-shell"><QRCodeSVG value={selected.address} size={184} /></div><button className="address-copy" onClick={async () => { await navigator.clipboard?.writeText(selected.address); setCompleted('Address copied') }}><code>{shortAddress(selected.address, 16, 10)}</code><span><Clipboard size={16} /> Copy</span></button>{completed && <div className="success-inline"><Check size={16} /> {completed}</div>}<p className="fine-print">Send only {selected.symbol} on the {selected.network}. Other assets may be permanently lost.</p></>}
+          {selected && <><div className="qr-shell"><QRCodeSVG value={selected.address} size={184} /></div><button className="address-copy" onClick={async () => { await copyToClipboard(selected.address); setCompleted('Address copied') }}><code>{shortAddress(selected.address, 16, 10)}</code><span><Clipboard size={16} /> Copy</span></button>{completed && <div className="success-inline"><Check size={16} /> {completed}</div>}<p className="fine-print">Send only {selected.symbol} on the {selected.network}. Other assets may be permanently lost.</p></>}
           <ErrorNotice message={error} />
         </div>
       </Modal>
