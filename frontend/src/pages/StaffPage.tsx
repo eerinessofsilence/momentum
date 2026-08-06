@@ -8,7 +8,6 @@ import {
   CurrencyDollar as CircleDollarSign,
   Clock as Clock3,
   Copy,
-  Headphones,
   SquaresFour as LayoutDashboard,
   SignOut as LogOut,
   List as Menu,
@@ -116,13 +115,6 @@ function StaffSidebar({ open, onClose }: { open: boolean; onClose: () => void })
             <small>Soon</small>
           </button>
         </nav>
-        <div className="staff-sidebar-note">
-          <Headphones size={20} />
-          <div>
-            <strong>Moderator mode</strong>
-            <span>Changes are recorded in client activity.</span>
-          </div>
-        </div>
         <div className="staff-account">
           <div className="staff-account-meta">
             <span className="staff-avatar small">{initials(user?.name || "MO")}</span>
@@ -781,7 +773,6 @@ export function StaffPage() {
                 <small>Total clients</small>
                 <strong>{summary.clients}</strong>
               </div>
-              <em>Active accounts</em>
             </article>
             <article>
               <span className="kpi-icon">
@@ -791,7 +782,6 @@ export function StaffPage() {
                 <small>Managed portfolio</small>
                 <strong>{money(summary.portfolio, 0)}</strong>
               </div>
-              <em>Across all wallets</em>
             </article>
             <article>
               <span className="kpi-icon">
@@ -801,9 +791,6 @@ export function StaffPage() {
                 <small>Needs reply</small>
                 <strong>{summary.needs_reply}</strong>
               </div>
-              <em className={summary.needs_reply ? "attention" : ""}>
-                {summary.needs_reply ? "Action required" : "Inbox clear"}
-              </em>
             </article>
             <article>
               <span className="kpi-icon">
@@ -813,7 +800,6 @@ export function StaffPage() {
                 <small>Transactions</small>
                 <strong>{summary.transactions}</strong>
               </div>
-              <em>Recorded events</em>
             </article>
           </section>
           {error && <Notice variant="danger" className="staff-error">{error}</Notice>}
@@ -852,7 +838,7 @@ export function StaffPage() {
                       <span className="client-card-copy">
                         <strong>{item.profile_label}</strong>
                         <small>
-                          {item.name} · @{item.username} · {relativeTime(item.last_message_at)}
+                          @{item.username} · {relativeTime(item.last_message_at)}
                         </small>
                       </span>
                       <span className="client-card-value">
@@ -882,7 +868,7 @@ export function StaffPage() {
                           <Badge variant="success" dot>Active</Badge>
                         </div>
                         <p>
-                          {client.name} · @{client.username} · {client.email}
+                          @{client.username} · {client.email}
                         </p>
                       </div>
                     </div>
