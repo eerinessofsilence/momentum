@@ -11,7 +11,6 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
-import { SpecularRim } from "./SpecularRim";
 
 export function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -24,21 +23,18 @@ export const Button = forwardRef<
   ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: "primary" | "secondary" | "danger" | "ghost";
     size?: ControlSize;
-    specular?: boolean;
   }
 >(function Button(
-  { children, className, variant = "secondary", size = "regular", specular, type = "button", ...props },
+  { children, className, variant = "secondary", size = "regular", type = "button", ...props },
   ref
 ) {
-  const hasSpecularRim = specular ?? variant === "primary";
   return (
     <button
       ref={ref}
       type={type}
-      className={cx("ui-button", `ui-button--${variant}`, `ui-control--${size}`, hasSpecularRim && "ui-button--specular", className)}
+      className={cx("ui-button", `ui-button--${variant}`, `ui-control--${size}`, className)}
       {...props}>
-      {hasSpecularRim && <SpecularRim radius={size === "small" ? 12 : 16} />}
-      <span className={hasSpecularRim ? "ui-button__label" : undefined}>{children}</span>
+      <span className="ui-button__label">{children}</span>
     </button>
   );
 });

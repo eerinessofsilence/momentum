@@ -5,7 +5,6 @@ import { useAuth } from "../AuthContext";
 import { useShell } from "../components/AppShell";
 import { LoadingPanel, PageHeading, TransactionRow, WalletRow } from "../components/PageParts";
 import { Card, CardHeader, Notice, Tabs } from "../components/UI";
-import { SpecularRim } from "../components/SpecularRim";
 import { money } from "../format";
 import type { DashboardData, DashboardPeriod } from "../types";
 
@@ -63,28 +62,24 @@ export function OverviewPage() {
               <div className="quick-actions">
                 <button onClick={() => openAction("receive")}>
                   <span>
-                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <ArrowDownToLine size={24} />
                   </span>
                   <strong>Receive</strong>
                 </button>
                 <button onClick={() => openAction("send")}>
                   <span>
-                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <ArrowUpRight size={24} />
                   </span>
                   <strong>Send</strong>
                 </button>
                 <button onClick={() => openAction("buy")}>
                   <span>
-                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <CircleDollarSign size={24} />
                   </span>
                   <strong>Buy</strong>
                 </button>
                 <button onClick={() => openAction("swap")}>
                   <span>
-                    <SpecularRim radius={16} baseColor="#523036" intensity={0.55} />
                     <RefreshCw size={24} />
                   </span>
                   <strong>Swap</strong>
