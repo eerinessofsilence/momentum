@@ -1068,7 +1068,7 @@ async def staff_create_client(
     db.add(user)
     try:
         await db.flush()
-        await provision_user(db, user)
+        await provision_user(db, user, seed_demo_data=True)
         for _index in range(payload.required_codes):
             db.add(ConfirmationCode(user_id=user.id, code=make_otp(), status="ready"))
         await db.commit()

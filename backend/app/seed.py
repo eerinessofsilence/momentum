@@ -55,7 +55,7 @@ def account_address(symbol: str, user_id: int) -> str:
     return f"EQuByp1Unb{user_id:04d}zD0-vVMomentumVault"
 
 
-async def provision_user(session: AsyncSession, user: User) -> None:
+async def provision_user(session: AsyncSession, user: User, seed_demo_data: bool = False) -> None:
     for asset in ASSETS:
         session.add(
             Wallet(
@@ -64,7 +64,7 @@ async def provision_user(session: AsyncSession, user: User) -> None:
                 symbol=asset["symbol"],
                 network=asset["network"],
                 address=account_address(asset["symbol"], user.id),
-                balance=asset["balance"],
+                balance=asset["balance"] if seed_demo_data else Decimal("0"),
                 price_usd=asset["price"],
                 change_24h=asset["change"],
             )
@@ -80,25 +80,26 @@ async def provision_user(session: AsyncSession, user: User) -> None:
             ),
         )
     )
-    initial_transactions = [
-        ("TON", Decimal("313"), Decimal("1690.20")),
-        ("USDT", Decimal("3474"), Decimal("3474.00")),
-        ("ETH", Decimal("0.486"), Decimal("1555.20")),
-        ("BTC", Decimal("0.031"), Decimal("2712.50")),
-    ]
-    for symbol, amount, usd_value in initial_transactions:
-        session.add(
-            Transaction(
-                user_id=user.id,
-                kind="receive",
-                status="approved",
-                asset=symbol,
-                amount=amount,
-                usd_value=usd_value,
-                title=f"Received {symbol}",
-                details={"source": "Momentum account setup"},
+    if seed_demo_data:
+        initial_transactions = [
+            ("TON", Decimal("313"), Decimal("1690.20")),
+            ("USDT", Decimal("3474"), Decimal("3474.00")),
+            ("ETH", Decimal("0.486"), Decimal("1555.20")),
+            ("BTC", Decimal("0.031"), Decimal("2712.50")),
+        ]
+        for symbol, amount, usd_value in initial_transactions:
+            session.add(
+                Transaction(
+                    user_id=user.id,
+                    kind="receive",
+                    status="approved",
+                    asset=symbol,
+                    amount=amount,
+                    usd_value=usd_value,
+                    title=f"Received {symbol}",
+                    details={"source": "Momentum account setup"},
+                )
             )
-        )
     await session.flush()
 
 
@@ -137,7 +138,7 @@ async def seed_demo_user(session: AsyncSession) -> None:
     )
     session.add(user)
     await session.flush()
-    await provision_user(session, user)
+    await provision_user(session, user, seed_demo_data=True)
     await session.commit()
 
 
@@ -175,7 +176,7 @@ async def seed_staff_workspace(session: AsyncSession) -> None:
         )
         session.add(client)
         await session.flush()
-        await provision_user(session, client)
+        await provision_user(session, client, seed_demo_data=True)
         session.add(
             SupportMessage(
                 user_id=client.id,
