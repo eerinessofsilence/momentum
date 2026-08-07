@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class RegisterInput(BaseModel):
@@ -21,6 +22,29 @@ class LoginInput(BaseModel):
 class PreferenceInput(BaseModel):
     theme: Optional[Literal["dark", "light"]] = None
     sounds: Optional[bool] = None
+    language: Optional[Literal["en", "fr", "es", "de"]] = None
+
+
+class AccountSettingsInput(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
+    email: EmailStr
+    daily_send_limit: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    monthly_send_limit: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 2:
+            raise ValueError("Name must contain at least 2 non-whitespace characters")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> "AccountSettingsInput":
+        if self.monthly_send_limit < self.daily_send_limit:
+            raise ValueError("Monthly limit must be greater than or equal to daily limit")
+        return self
 
 
 class SupportMessageInput(BaseModel):
@@ -34,7 +58,7 @@ class SendInput(BaseModel):
     address: str = Field(min_length=8, max_length=180)
 
 
-class BuyInput(BaseModel):
+class DepositRequestInput(BaseModel):
     asset: str
     amount_usd: Decimal = Field(gt=0, le=50000)
 
@@ -55,7 +79,16 @@ class SwapInput(BaseModel):
 class StaffBalanceInput(BaseModel):
     asset: str
     action: Literal["credit"] = "credit"
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, max_digits=28, decimal_places=8)
+
+
+class StaffTransactionUpdateInput(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=28, decimal_places=8)
+    effective_at: datetime
+
+
+class StaffDepositDecisionInput(BaseModel):
+    decision: Literal["approve", "reject"]
 
 
 class StaffCodeInput(BaseModel):
@@ -75,6 +108,17 @@ class StaffVerificationInput(BaseModel):
 
 class StaffProfileStatusInput(BaseModel):
     status: Literal["active", "suspended", "archived"]
+
+
+class StaffClientSettingsInput(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
+    email: EmailStr
+    daily_send_limit: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    monthly_send_limit: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    manual_review_threshold: Decimal = Field(ge=0, max_digits=20, decimal_places=2)
+    theme: Optional[Literal["dark", "light"]] = None
+    sounds: Optional[bool] = None
 
 
 class DemoTransferInput(BaseModel):

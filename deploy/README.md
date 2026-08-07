@@ -47,8 +47,8 @@ cp .env.prod.example .env
 nano .env
 ```
 
-Set a real `POSTGRES_PASSWORD`, `SUPPORT_EMAIL`/`SUPPORT_TELEGRAM`, and
-`FRONTEND_ORIGIN` (use `https://<your-vps-ip>` for now). Leave
+Set a real `POSTGRES_PASSWORD` and `FRONTEND_ORIGIN` (use
+`https://<your-vps-ip>` for now). Leave
 `DEMO_MODE=false` — the demo build shows OTP codes directly in the UI,
 which you don't want for real users.
 

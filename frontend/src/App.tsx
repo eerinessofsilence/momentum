@@ -9,8 +9,11 @@ import { SettingsPage } from './pages/SettingsPage'
 import { SupportPage } from './pages/SupportPage'
 import { WalletsPage } from './pages/WalletsPage'
 import { StaffPage } from './pages/StaffPage'
+import { AccountStatusPage } from './pages/AccountStatusPage'
 import { Spinner } from './components/UI'
+import { useClientI18n } from './clientI18n'
 import { navigate, usePathname } from './router'
+import { translateStaff } from './staffI18n'
 
 const pages: Record<string, ComponentType> = {
   '/app/overview': OverviewPage,
@@ -22,14 +25,16 @@ const pages: Record<string, ComponentType> = {
 
 function ProtectedShell({ path }: { path: string }) {
   const { user, loading } = useAuth()
+  const { t } = useClientI18n()
   const Page = pages[path] || OverviewPage
   useEffect(() => {
     if (!loading && !user) navigate('/auth', true)
     else if (!loading && user?.is_staff) navigate('/staff', true)
   }, [loading, user])
-  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label="Loading Momentum" /><p>Loading Momentum…</p></div>
+  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label={t('loadingMomentum')} /><p>{t('loadingMomentum')}</p></div>
   if (!user) return null
   if (user.is_staff) return null
+  if (user.account_status !== 'active') return <AccountStatusPage />
   return <AppShell path={path}><Page /></AppShell>
 }
 
@@ -39,7 +44,7 @@ function StaffRoute() {
     if (!loading && !user) navigate('/auth', true)
     else if (!loading && user && !user.is_staff) navigate('/app/overview', true)
   }, [loading, user])
-  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label="Loading Operations" /><p>Loading Operations…</p></div>
+  if (loading) return <div className="app-loader"><MomentumMark className="loader-mark" /><Spinner label={translateStaff('ru', 'loadingOperations')} /><p>{translateStaff('ru', 'loadingOperations')}</p></div>
   if (!user?.is_staff) return null
   return <StaffPage />
 }

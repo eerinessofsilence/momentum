@@ -9,14 +9,16 @@ import {
   Wallet as WalletCards,
   X,
 } from '@phosphor-icons/react'
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../AuthContext'
 import { api } from '../api'
+import { useClientI18n } from '../clientI18n'
 import { navigate } from '../router'
-import type { ActionKind, VerificationStatus } from '../types'
+import type { ActionKind } from '../types'
 import { ActionModal } from './ActionModal'
 import { Brand } from './Brand'
 import { Badge } from './UI'
+import { useNavigationDrawer } from './useNavigationDrawer'
 
 export type ShellContext = {
   openAction: (kind: ActionKind, symbol?: string) => void
@@ -30,20 +32,25 @@ export function useShell() {
 }
 
 const navigation = [
-  { to: '/app/overview', label: 'Overview', icon: LayoutDashboard },
-  { to: '/app/wallets', label: 'My Wallets', icon: WalletCards },
-  { to: '/app/history', label: 'History', icon: Clock3 },
-  { to: '/app/support', label: 'Support', icon: CircleHelp },
-  { to: '/app/settings', label: 'Settings', icon: Settings },
+  { to: '/app/overview', label: 'overview' as const, icon: LayoutDashboard },
+  { to: '/app/wallets', label: 'wallets' as const, icon: WalletCards },
+  { to: '/app/history', label: 'history' as const, icon: Clock3 },
+  { to: '/app/support', label: 'support' as const, icon: CircleHelp },
+  { to: '/app/settings', label: 'settings' as const, icon: Settings },
 ]
 
 export function AppShell({ path, children }: { path: string; children: ReactNode }) {
   const { user, logout, returnToStaff } = useAuth()
+  const { t } = useClientI18n()
   const [mobileMenu, setMobileMenu] = useState(false)
   const [action, setAction] = useState<{ kind: ActionKind; symbol?: string } | null>(null)
   const [supportUnread, setSupportUnread] = useState(0)
-  const [verification, setVerification] = useState<VerificationStatus | null>(null)
   const [returningToStaff, setReturningToStaff] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const closeMobileMenu = useCallback(() => setMobileMenu(false), [])
+
+  useNavigationDrawer(mobileMenu, closeMobileMenu, sidebarRef, menuButtonRef)
 
   const refreshSupportUnread = useCallback(() => {
     if (path === '/app/support') {
@@ -68,22 +75,6 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
     }
   }, [refreshSupportUnread])
 
-  const refreshVerification = useCallback(() => {
-    api<VerificationStatus>('/verification/status')
-      .then(setVerification)
-      .catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    refreshVerification()
-    const timer = window.setInterval(refreshVerification, 30_000)
-    window.addEventListener('momentum:data-changed', refreshVerification)
-    return () => {
-      window.clearInterval(timer)
-      window.removeEventListener('momentum:data-changed', refreshVerification)
-    }
-  }, [refreshVerification])
-
   const signOut = async () => {
     await logout()
     navigate('/auth')
@@ -104,14 +95,14 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
     <div className="app-shell">
       <header className="mobile-header">
         <Brand compact />
-        <button className="icon-button" onClick={() => setMobileMenu(true)} aria-label="Open navigation"><Menu /></button>
+        <button ref={menuButtonRef} className="icon-button" onClick={() => setMobileMenu(true)} aria-label={t('openNavigation')} aria-expanded={mobileMenu} aria-controls="client-navigation"><Menu /></button>
       </header>
-      {mobileMenu && <button className="mobile-scrim" onClick={() => setMobileMenu(false)} aria-label="Close navigation" />}
-      <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
+      {mobileMenu && <button className="mobile-scrim" onClick={() => setMobileMenu(false)} aria-label={t('closeNavigation')} />}
+      <aside ref={sidebarRef} id="client-navigation" className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
         <div className="sidebar-top">
-          <div className="sidebar-brand-row"><Brand /><button className="icon-button mobile-close" onClick={() => setMobileMenu(false)} aria-label="Close navigation"><X /></button></div>
+          <div className="sidebar-brand-row"><Brand /><button className="icon-button mobile-close" onClick={() => setMobileMenu(false)} aria-label={t('closeNavigation')}><X /></button></div>
         </div>
-        <nav className="sidebar-nav" aria-label="Primary">
+        <nav className="sidebar-nav" aria-label={t('primaryNavigation')}>
           {navigation.map(({ to, label, icon: Icon }) => (
             <a
               key={to}
@@ -119,21 +110,14 @@ export function AppShell({ path, children }: { path: string; children: ReactNode
               onClick={(event) => { event.preventDefault(); setMobileMenu(false); navigate(to) }}
               className={`nav-item ${path === to ? 'active' : ''}`}
             >
-              <Icon size={20} /><span>{label}</span>{to === '/app/support' && supportUnread > 0 && <Badge variant="accent" className="nav-badge" aria-label={`${supportUnread} unread support ${supportUnread === 1 ? 'message' : 'messages'}`}>{supportUnread > 99 ? '99+' : supportUnread}</Badge>}
+              <Icon size={20} /><span>{t(label)}</span>{to === '/app/support' && supportUnread > 0 && <Badge variant="accent" className="nav-badge" aria-label={t('unreadMessages', { count: supportUnread })}>{supportUnread > 99 ? '99+' : supportUnread}</Badge>}
             </a>
           ))}
         </nav>
         <div className="sidebar-account">
-          {verification && verification.required > 0 && (
-            <div className={`profile-verification ${verification.state}`}>
-              <span>{verification.state === 'processing' ? 'Demo processing' : 'Confirmation codes'}</span>
-              <strong>{verification.used} / {verification.required}</strong>
-              <progress value={verification.used} max={verification.required} />
-            </div>
-          )}
           <div className="profile-card"><span className="avatar">{user?.name.slice(0, 1).toUpperCase()}</span><div><strong>{user?.name}</strong><small>@{user?.username}</small></div></div>
-          {user?.impersonating && <button className="return-staff-button" disabled={returningToStaff} onClick={exitClientProfile}><ArrowLeft size={20} /> {returningToStaff ? 'Returning…' : 'Return to Operations'}</button>}
-          <button className="signout-button" onClick={signOut}><LogOut size={20} /> Sign out</button>
+          {user?.impersonating && <button className="return-staff-button" disabled={returningToStaff} onClick={exitClientProfile}><ArrowLeft size={20} /> {returningToStaff ? t('returning') : t('returnOperations')}</button>}
+          <button className="signout-button" onClick={signOut}><LogOut size={20} /> {t('signOut')}</button>
         </div>
       </aside>
       <main className="app-main">

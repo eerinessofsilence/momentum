@@ -10,8 +10,6 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     price_refresh_enabled: bool = True
     price_refresh_interval_seconds: int = 60
-    support_email: str = "support@momentum.local"
-    support_telegram: str = "@momentum_support"
     frontend_origin: str = "http://localhost:5173"
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
 

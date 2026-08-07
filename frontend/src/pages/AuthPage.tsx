@@ -1,6 +1,7 @@
-import { Pulse as Activity, Clock as Clock3, ShieldCheck } from "@phosphor-icons/react";
+import { Pulse as Activity, Clock as Clock3, Eye, EyeSlash, ShieldCheck } from "@phosphor-icons/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
+import { localizeClientError, useClientI18n } from "../clientI18n";
 import { Brand } from "../components/Brand";
 import { HalftoneReveal } from "../components/HalftoneReveal";
 import { Button, Field, Input, Notice, Tabs } from "../components/UI";
@@ -8,6 +9,7 @@ import { navigate } from "../router";
 
 export function AuthPage() {
   const { user, login, register } = useAuth();
+  const { locale, t } = useClientI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -15,6 +17,7 @@ export function AuthPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (user) navigate(user.is_staff ? "/staff" : "/app/overview", true);
@@ -29,7 +32,7 @@ export function AuthPage() {
       else await register({ name, username, email, password });
       // The auth state effect sends staff and clients to their respective workspace.
     } catch (err) {
-      setError((err as Error).message);
+      setError(localizeClientError((err as Error).message, locale));
     } finally {
       setBusy(false);
     }
@@ -57,17 +60,17 @@ export function AuthPage() {
           <Brand />
         </div>
         <div className="auth-copy">
-          <h1>The wallet that keeps your future in motion.</h1>
-          <p>Move, swap, and manage your portfolio through a secure multi-chain experience.</p>
+          <h1>{t("authHeroTitle")}</h1>
+          <p>{t("authHeroDescription")}</p>
           <div className="hero-features">
             <span>
-              <ShieldCheck /> Advanced security at every step.
+              <ShieldCheck /> {t("securityFeature")}
             </span>
             <span>
-              <Activity /> Four chains supported — BTC, ETH, USDT, TON.
+              <Activity /> {t("chainsFeature")}
             </span>
             <span>
-              <Clock3 /> Momentum Support — replies in seconds.
+              <Clock3 /> {t("supportFeature")}
             </span>
           </div>
         </div>
@@ -78,24 +81,24 @@ export function AuthPage() {
           <Tabs
             className="auth-tabs"
             variant="segmented"
-            ariaLabel="Authentication mode"
+            ariaLabel={t("authMode")}
             value={mode}
             onChange={(nextMode) => {
               setMode(nextMode);
               setError("");
             }}
             items={[
-              { value: "login", label: "Sign in" },
-              { value: "register", label: "Create account" },
+              { value: "login", label: t("signIn") },
+              { value: "register", label: t("createAccount") },
             ]}
           />
           <div className="auth-form-content">
             <div className="auth-title">
-              <h2>{mode === "login" ? "Welcome back" : "Create your wallet"}</h2>
+              <h2>{mode === "login" ? t("welcomeBack") : t("createWallet")}</h2>
               <p>
                 {mode === "login"
-                  ? "Sign in to access your Momentum workspace."
-                  : "Create your account and set up your wallet profile."}
+                  ? t("signInDescription")
+                  : t("registerDescription")}
               </p>
             </div>
             <form className="auth-form" onSubmit={submit}>
@@ -104,7 +107,7 @@ export function AuthPage() {
                 what lets only the new field play the entrance. */}
             {mode === "register" && (
               <div className="auth-name-row" key="identity">
-                <Field label="Name">
+                <Field label={t("name")}>
                   <Input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
@@ -113,11 +116,10 @@ export function AuthPage() {
                     required
                   />
                 </Field>
-                <Field label="Username">
+                <Field label={t("username")}>
                   <Input
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
-                    placeholder="Your username..."
                     autoComplete="username"
                     required
                   />
@@ -125,18 +127,17 @@ export function AuthPage() {
               </div>
             )}
             {mode === "login" && (
-              <Field label="Username or email" key="username">
+              <Field label={t("usernameOrEmail")} key="username">
                 <Input
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  placeholder="Your username..."
                   autoComplete="username"
                   required
                 />
               </Field>
             )}
             {mode === "register" && (
-              <Field label="Email" key="email">
+              <Field label={t("email")} key="email">
                 <Input
                   type="email"
                   value={email}
@@ -147,45 +148,48 @@ export function AuthPage() {
                 />
               </Field>
             )}
-            <Field label="Password" key="password">
+            <Field label={t("password")} key="password">
+              <div className="password-field">
               <Input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Your password..."
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 minLength={mode === "register" ? 8 : 1}
                 required
               />
+              <button type="button" className="password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? t("hidePassword") : t("showPassword")}>{showPassword ? <EyeSlash size={20} /> : <Eye size={20} />}</button>
+              </div>
+              {mode === "register" && <small className="auth-password-hint">{t("passwordRule")}</small>}
             </Field>
             {error && <Notice variant="danger">{error}</Notice>}
             <Button type="submit" variant="primary" size="large" className="auth-submit" disabled={busy}>
-              {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create wallet"}
+              {busy ? t("waiting") : mode === "login" ? t("signIn") : t("createWalletButton")}
             </Button>
             </form>
             <p className="auth-help">
             {mode === "login" ? (
               <>
-                New to Momentum?{" "}
+                {t("newToMomentum")}{" "}
                 <button
                   type="button"
                   onClick={() => {
                     setMode("register");
                     setError("");
                   }}>
-                  Create an account
+                  {t("createAccount")}
                 </button>
               </>
             ) : (
               <>
-                Already have an account?{" "}
+                {t("alreadyAccount")}{" "}
                 <button
                   type="button"
                   onClick={() => {
                     setMode("login");
                     setError("");
                   }}>
-                  Sign in
+                  {t("signIn")}
                 </button>
               </>
             )}

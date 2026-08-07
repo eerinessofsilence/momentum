@@ -5,7 +5,7 @@ import contextlib
 import secrets
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
@@ -32,6 +32,7 @@ from .db import Base, SessionLocal, engine, get_db
 from .models import (
     ConfirmationCode,
     DemoTransfer,
+    DepositRequest,
     Preference,
     Session,
     SupportAttachment,
@@ -42,17 +43,21 @@ from .models import (
 )
 from .prices import price_refresh_loop
 from .schemas import (
-    BuyInput,
+    AccountSettingsInput,
     DemoCodeInput,
     DemoTransferInput,
+    DepositRequestInput,
     LoginInput,
     PreferenceInput,
     RegisterInput,
     SendInput,
     StaffBalanceInput,
     StaffClientCreateInput,
+    StaffClientSettingsInput,
     StaffCodeInput,
+    StaffDepositDecisionInput,
     StaffProfileStatusInput,
+    StaffTransactionUpdateInput,
     StaffVerificationInput,
     SupportMessageInput,
     SwapInput,
@@ -124,6 +129,12 @@ def utc_iso(value: datetime | None) -> str | None:
     return f"{value.isoformat()}Z" if value is not None else None
 
 
+def naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def require_asset(asset: str) -> str:
     normalized = asset.upper()
     if normalized not in SUPPORTED_ASSETS:
@@ -142,9 +153,17 @@ def serialize_user(
         "created_at": user.created_at,
         "theme": preference.theme if preference else "dark",
         "sounds": preference.sounds if preference else True,
+        "language": preference.language if preference else "en",
         "is_staff": user.is_staff,
         "impersonating": impersonating,
         "account_status": user.account_status,
+        "daily_send_limit": str(as_decimal(user.daily_send_limit).quantize(Decimal("0.01"))),
+        "monthly_send_limit": str(
+            as_decimal(user.monthly_send_limit).quantize(Decimal("0.01"))
+        ),
+        "manual_review_threshold": str(
+            as_decimal(user.manual_review_threshold).quantize(Decimal("0.01"))
+        ),
         "verification": {
             "state": user.verification_state,
             "required": user.verification_target,
@@ -171,6 +190,7 @@ def serialize_wallet(wallet: Wallet) -> dict:
 
 
 def serialize_transaction(transaction: Transaction) -> dict:
+    details = transaction.details or {}
     return {
         "id": transaction.id,
         "kind": transaction.kind,
@@ -179,9 +199,21 @@ def serialize_transaction(transaction: Transaction) -> dict:
         "amount": str(as_decimal(transaction.amount).normalize()),
         "usd_value": str(as_decimal(transaction.usd_value).quantize(Decimal("0.01"))),
         "title": transaction.title,
-        "details": transaction.details or {},
+        "details": details,
         "created_at": transaction.created_at,
+        "effective_at": transaction.effective_at,
+        "editable": is_manual_credit(transaction),
     }
+
+
+def is_manual_credit(transaction: Transaction) -> bool:
+    details = transaction.details or {}
+    return (
+        transaction.kind == "receive"
+        and transaction.status == "approved"
+        and details.get("reason") == "Manual account adjustment"
+        and isinstance(details.get("staff_id"), int)
+    )
 
 
 def serialize_demo_transfer(item: DemoTransfer) -> dict:
@@ -196,6 +228,17 @@ def serialize_demo_transfer(item: DemoTransfer) -> dict:
         "used_codes": item.used_codes,
         "processing_until": utc_iso(item.processing_until),
         "created_at": item.created_at,
+    }
+
+
+def serialize_deposit_request(item: DepositRequest) -> dict:
+    return {
+        "id": item.id,
+        "asset": item.asset,
+        "amount_usd": str(as_decimal(item.amount_usd).quantize(Decimal("0.01"))),
+        "status": item.status,
+        "created_at": item.created_at,
+        "decided_at": utc_iso(item.decided_at),
     }
 
 
@@ -251,7 +294,7 @@ async def begin_demo_processing(
     transfer.transaction_id = transaction.id
 
 
-async def current_user(
+async def authenticated_user(
     momentum_session: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -265,6 +308,10 @@ async def current_user(
     user = row.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    return user
+
+
+async def current_user(user: User = Depends(authenticated_user)) -> User:
     if user.account_status != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
     return user
@@ -295,7 +342,27 @@ def set_session_cookie(response: Response, name: str, raw_token: str) -> None:
     )
 
 
-async def current_staff(user: User = Depends(current_user)) -> User:
+async def current_staff(
+    momentum_session: str | None = Cookie(default=None),
+    momentum_staff_session: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    # During impersonation the active session belongs to the client, while the
+    # moderator's session is retained in a separate HttpOnly cookie. Only use
+    # that backup after the active token has actually expired: a valid client
+    # token must never gain staff API access.
+    try:
+        user = await authenticated_user(momentum_session, db)
+    except HTTPException as error:
+        if error.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        staff = await valid_staff_session(db, momentum_staff_session)
+        if staff:
+            return staff
+        raise
+
+    if user.account_status != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
     if not user.is_staff:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required")
     return user
@@ -364,8 +431,6 @@ async def login(
     )
     if not user or not verify_password(user.password_hash, payload.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    if user.account_status != "active":
-        raise HTTPException(status_code=403, detail="Account is not active")
     preference = await db.get(Preference, user.id)
     await issue_session(db, response, user)
     return {"user": serialize_user(user, preference)}
@@ -396,7 +461,7 @@ async def logout(
 
 @app.get("/api/auth/me")
 async def me(
-    user: User = Depends(current_user),
+    user: User = Depends(authenticated_user),
     momentum_staff_session: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -412,21 +477,25 @@ async def staff_impersonate_client(
     user_id: int,
     response: Response,
     momentum_session: str | None = Cookie(default=None),
+    momentum_staff_session: str | None = Cookie(default=None),
     _: User = Depends(current_staff),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    if client.account_status != "active":
-        raise HTTPException(status_code=409, detail="Only active client profiles can be opened")
-    if not momentum_session:
+    staff_token = (
+        momentum_session
+        if await valid_staff_session(db, momentum_session)
+        else momentum_staff_session
+    )
+    if not staff_token:
         raise HTTPException(status_code=401, detail="Staff session expired")
 
     # Preserve the staff token only in a second HttpOnly cookie. The browser
     # never receives a client password, and the staff session remains the sole
     # authority that can restore the operations workspace.
-    set_session_cookie(response, STAFF_COOKIE_NAME, momentum_session)
+    set_session_cookie(response, STAFF_COOKIE_NAME, staff_token)
     preference = await db.get(Preference, client.id)
     await issue_session(db, response, client)
     return {"user": serialize_user(client, preference, impersonating=True)}
@@ -502,7 +571,7 @@ def portfolio_history(
     transaction's own historical usd_value snapshot - keeps this from
     producing nonsense like a negative portfolio value when an asset's price
     has since moved a lot. `transactions` must be sorted ascending by
-    created_at.
+    effective_at.
     """
     price_by_symbol = {wallet.symbol: as_decimal(wallet.price_usd) for wallet in wallets}
     running_balance = {wallet.symbol: as_decimal(wallet.balance) for wallet in wallets}
@@ -519,7 +588,7 @@ def portfolio_history(
     remaining = list(transactions)
     values: list[Decimal] = []
     for timestamp in reversed(timestamps):
-        while remaining and remaining[-1].created_at > timestamp:
+        while remaining and remaining[-1].effective_at > timestamp:
             for asset, delta in transaction_asset_deltas(remaining.pop()):
                 if asset in running_balance:
                     running_balance[asset] -= delta
@@ -543,7 +612,7 @@ async def dashboard(user: User = Depends(current_user), db: AsyncSession = Depen
             await db.scalars(
                 select(Transaction)
                 .where(Transaction.user_id == user.id)
-                .order_by(Transaction.created_at, Transaction.id)
+                .order_by(Transaction.effective_at, Transaction.id)
             )
         ).all()
     )
@@ -589,7 +658,7 @@ async def transactions(
         await db.scalars(
             select(Transaction)
             .where(Transaction.user_id == user.id)
-            .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+            .order_by(Transaction.effective_at.desc(), Transaction.id.desc())
         )
     ).all()
     return {"items": [serialize_transaction(item) for item in items]}
@@ -600,7 +669,11 @@ async def get_preferences(
     user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> dict:
     preference = await db.get(Preference, user.id)
-    return {"theme": preference.theme, "sounds": preference.sounds}
+    return {
+        "theme": preference.theme,
+        "sounds": preference.sounds,
+        "language": preference.language,
+    }
 
 
 @app.patch("/api/preferences")
@@ -614,8 +687,39 @@ async def update_preferences(
         preference.theme = payload.theme
     if payload.sounds is not None:
         preference.sounds = payload.sounds
+    if payload.language is not None:
+        preference.language = payload.language
     await db.commit()
-    return {"theme": preference.theme, "sounds": preference.sounds}
+    return {
+        "theme": preference.theme,
+        "sounds": preference.sounds,
+        "language": preference.language,
+    }
+
+
+@app.patch("/api/account/settings")
+async def update_account_settings(
+    payload: AccountSettingsInput,
+    user: User = Depends(current_user),
+    momentum_staff_session: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user.name = payload.name
+    user.profile_label = user.name
+    user.username = payload.username.strip().lower()
+    user.email = str(payload.email).lower()
+    user.daily_send_limit = as_decimal(payload.daily_send_limit)
+    user.monthly_send_limit = as_decimal(payload.monthly_send_limit)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username or email is already registered")
+    preference = await db.get(Preference, user.id)
+    impersonating = not user.is_staff and bool(
+        await valid_staff_session(db, momentum_staff_session)
+    )
+    return {"user": serialize_user(user, preference, impersonating=impersonating)}
 
 
 @app.get("/api/support/messages")
@@ -847,6 +951,31 @@ async def demo_transfer_status(
     return {"transfer": serialize_demo_transfer(transfer)}
 
 
+@app.delete("/api/demo/transfers/{transfer_id}", status_code=204)
+async def cancel_demo_transfer(
+    transfer_id: int,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    transfer = await db.scalar(
+        select(DemoTransfer)
+        .where(DemoTransfer.id == transfer_id, DemoTransfer.user_id == user.id)
+        .with_for_update()
+    )
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Demo transfer not found")
+    if transfer.status != "verification":
+        raise HTTPException(
+            status_code=409, detail="Only a transfer awaiting verification can be cancelled"
+        )
+    transfer.status = "cancelled"
+    user.verification_state = (
+        "locked" if user.verification_target > user.verification_used else "completed"
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
 @app.post("/api/demo/transfers/{transfer_id}/codes")
 async def submit_demo_transfer_code(
     transfer_id: int,
@@ -873,7 +1002,13 @@ async def submit_demo_transfer_code(
         .with_for_update()
     )
     if not next_code:
-        raise HTTPException(status_code=409, detail="No confirmation codes are available")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No unused confirmation codes are available. "
+                "Ask the moderator to generate more."
+            ),
+        )
     if not secrets.compare_digest(next_code.code, payload.code):
         raise HTTPException(status_code=422, detail="Enter the next confirmation code")
     next_code.status = "used"
@@ -909,30 +1044,58 @@ async def verification_status(
     }
 
 
-@app.post("/api/demo/buy", status_code=201)
-async def demo_buy(
-    payload: BuyInput, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+@app.get("/api/deposit-requests")
+async def deposit_requests(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> dict:
+    items = list(
+        (
+            await db.scalars(
+                select(DepositRequest)
+                .where(DepositRequest.user_id == user.id)
+                .order_by(DepositRequest.created_at.desc(), DepositRequest.id.desc())
+            )
+        ).all()
+    )
+    return {"items": [serialize_deposit_request(item) for item in items]}
+
+
+@app.post("/api/deposit-requests", status_code=201)
+@app.post("/api/demo/buy", status_code=201, include_in_schema=False)
+async def create_deposit_request(
+    payload: DepositRequestInput,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     symbol = require_asset(payload.asset)
-    wallet = await owned_wallet(db, user.id, symbol, lock=True)
     amount_usd = as_decimal(payload.amount_usd)
-    quantity = (amount_usd / as_decimal(wallet.price_usd)).quantize(
-        MONEY_EPSILON, rounding=ROUND_DOWN
+    pending = await db.scalar(
+        select(DepositRequest).where(
+            DepositRequest.user_id == user.id, DepositRequest.status == "pending"
+        )
     )
-    wallet.balance = as_decimal(wallet.balance) + quantity
-    transaction = Transaction(
+    if pending:
+        raise HTTPException(status_code=409, detail="A deposit request is already under review")
+    request = DepositRequest(
         user_id=user.id,
-        kind="buy",
-        status="approved",
         asset=symbol,
-        amount=quantity,
-        usd_value=amount_usd.quantize(Decimal("0.01")),
-        title=f"Bought {symbol}",
-        details={"payment": "Account balance", "environment": "development"},
+        amount_usd=amount_usd.quantize(Decimal("0.01")),
+        status="pending",
     )
-    db.add(transaction)
+    db.add(request)
+    db.add(
+        SupportMessage(
+            user_id=user.id,
+            sender="user",
+            body=(
+                f"Deposit request: ${amount_usd.quantize(Decimal('0.01'))} in {symbol}. "
+                "Please verify my account and review the request."
+            ),
+        )
+    )
     await db.commit()
-    return {"transaction": serialize_transaction(transaction), "wallet": serialize_wallet(wallet)}
+    await db.refresh(request)
+    return {"request": serialize_deposit_request(request)}
 
 
 @app.post("/api/demo/swap", status_code=201)
@@ -981,8 +1144,6 @@ async def demo_swap(
 async def app_config() -> dict:
     return {
         "demo_mode": settings.demo_mode,
-        "support_email": settings.support_email,
-        "support_telegram": settings.support_telegram,
         "version": "1.0.0",
     }
 
@@ -1023,6 +1184,13 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         "verification_required": user.verification_target,
         "verification_used": user.verification_used,
         "processing_until": utc_iso(user.processing_until),
+        "daily_send_limit": str(as_decimal(user.daily_send_limit).quantize(Decimal("0.01"))),
+        "monthly_send_limit": str(
+            as_decimal(user.monthly_send_limit).quantize(Decimal("0.01"))
+        ),
+        "manual_review_threshold": str(
+            as_decimal(user.manual_review_threshold).quantize(Decimal("0.01"))
+        ),
     }
     if not detailed:
         return result
@@ -1040,7 +1208,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
             await db.scalars(
                 select(Transaction)
                 .where(Transaction.user_id == user.id)
-                .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+                .order_by(Transaction.effective_at.desc(), Transaction.id.desc())
                 .limit(30)
             )
         ).all()
@@ -1054,8 +1222,21 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
             )
         ).all()
     )
+    deposits = list(
+        (
+            await db.scalars(
+                select(DepositRequest)
+                .where(DepositRequest.user_id == user.id)
+                .order_by(DepositRequest.created_at.desc(), DepositRequest.id.desc())
+            )
+        ).all()
+    )
+    preference = await db.get(Preference, user.id)
     result.update(
         {
+            "theme": preference.theme if preference else "dark",
+            "sounds": preference.sounds if preference else True,
+            "language": preference.language if preference else "en",
             "wallets": [serialize_wallet(wallet) for wallet in wallets],
             "transactions": [serialize_transaction(item) for item in transactions],
             "messages": [
@@ -1077,6 +1258,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
                 }
                 for item in codes
             ],
+            "deposit_requests": [serialize_deposit_request(item) for item in deposits],
         }
     )
     return result
@@ -1131,7 +1313,7 @@ async def staff_create_client(
     db.add(user)
     try:
         await db.flush()
-        await provision_user(db, user, seed_demo_data=True)
+        await provision_user(db, user)
         for _index in range(payload.required_codes):
             db.add(ConfirmationCode(user_id=user.id, code=make_otp(), status="ready"))
         await db.commit()
@@ -1172,16 +1354,88 @@ async def staff_update_verification(
     client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    if payload.required_codes < client.verification_used:
+    active_transfer = await db.scalar(
+        select(DemoTransfer)
+        .where(
+            DemoTransfer.user_id == client.id,
+            DemoTransfer.status == "verification",
+        )
+        .order_by(DemoTransfer.id.desc())
+        .with_for_update()
+    )
+    minimum_used = active_transfer.used_codes if active_transfer else client.verification_used
+    if payload.required_codes < minimum_used:
         raise HTTPException(
             status_code=422,
             detail="Required codes cannot be lower than the number already used",
         )
     client.verification_target = payload.required_codes
-    if client.verification_state not in {"verification", "processing"}:
+    if active_transfer:
+        active_transfer.required_codes = payload.required_codes
+        client.verification_state = "verification"
+        if active_transfer.used_codes >= active_transfer.required_codes:
+            await begin_demo_processing(db, client, active_transfer)
+    elif client.verification_state not in {"verification", "processing"}:
         client.verification_state = (
             "locked" if payload.required_codes > client.verification_used else "completed"
         )
+    await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
+@app.patch("/api/staff/clients/{user_id}/transactions/{transaction_id}")
+async def staff_update_manual_credit(
+    user_id: int,
+    transaction_id: int,
+    payload: StaffTransactionUpdateInput,
+    staff: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(
+        select(User).where(User.id == user_id, User.is_staff.is_(False))
+    )
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    transaction = await db.scalar(
+        select(Transaction)
+        .where(Transaction.id == transaction_id, Transaction.user_id == client.id)
+        .with_for_update()
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if not is_manual_credit(transaction):
+        raise HTTPException(status_code=422, detail="Only manual credits can be edited")
+
+    effective_at = naive_utc(payload.effective_at)
+    current_time = now()
+    if effective_at < client.created_at:
+        raise HTTPException(
+            status_code=422, detail="Credit date cannot be before account creation"
+        )
+    if effective_at > current_time:
+        raise HTTPException(status_code=422, detail="Credit date cannot be in the future")
+
+    wallet = await owned_wallet(db, client.id, transaction.asset, lock=True)
+    old_amount = as_decimal(transaction.amount)
+    new_amount = as_decimal(payload.amount).quantize(MONEY_EPSILON, rounding=ROUND_DOWN)
+    next_balance = as_decimal(wallet.balance) + new_amount - old_amount
+    if next_balance < 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Credit cannot be reduced below the amount still available in the wallet",
+        )
+
+    wallet.balance = next_balance
+    transaction.amount = new_amount
+    transaction.usd_value = (new_amount * as_decimal(wallet.price_usd)).quantize(
+        Decimal("0.01")
+    )
+    transaction.effective_at = effective_at
+    transaction.details = {
+        **(transaction.details or {}),
+        "last_edited_by_staff_id": staff.id,
+        "last_edited_at": utc_iso(current_time),
+    }
     await db.commit()
     return {"client": await serialize_staff_client(db, client, detailed=True)}
 
@@ -1204,6 +1458,40 @@ async def staff_update_client_status(
         for session in sessions:
             await db.delete(session)
     await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
+@app.patch("/api/staff/clients/{user_id}/settings")
+async def staff_update_client_settings(
+    user_id: int,
+    payload: StaffClientSettingsInput,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    client.name = payload.name.strip()
+    client.profile_label = client.name
+    client.username = payload.username.strip().lower()
+    client.email = str(payload.email).lower()
+    client.daily_send_limit = as_decimal(payload.daily_send_limit)
+    client.monthly_send_limit = as_decimal(payload.monthly_send_limit)
+    client.manual_review_threshold = as_decimal(payload.manual_review_threshold)
+    if payload.theme is not None or payload.sounds is not None:
+        preference = await db.get(Preference, client.id)
+        if not preference:
+            preference = Preference(user_id=client.id)
+            db.add(preference)
+        if payload.theme is not None:
+            preference.theme = payload.theme
+        if payload.sounds is not None:
+            preference.sounds = payload.sounds
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username or email is already registered")
     return {"client": await serialize_staff_client(db, client, detailed=True)}
 
 
@@ -1345,7 +1633,7 @@ async def staff_adjust_balance(
         raise HTTPException(status_code=404, detail="Client not found")
     symbol = require_asset(payload.asset)
     wallet = await owned_wallet(db, client.id, symbol, lock=True)
-    amount = as_decimal(payload.amount)
+    amount = as_decimal(payload.amount).quantize(MONEY_EPSILON, rounding=ROUND_DOWN)
     wallet.balance = as_decimal(wallet.balance) + amount
     transaction = Transaction(
         user_id=client.id,
@@ -1354,10 +1642,86 @@ async def staff_adjust_balance(
         asset=symbol,
         amount=amount,
         usd_value=(amount * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
-        title="Manual credit by Momentum Operations",
+        title=f"Received {symbol}",
         details={"staff_id": staff.id, "reason": "Manual account adjustment"},
     )
     db.add(transaction)
+    await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
+@app.post("/api/staff/clients/{user_id}/deposit-requests/{request_id}/decision")
+async def staff_decide_deposit_request(
+    user_id: int,
+    request_id: int,
+    payload: StaffDepositDecisionInput,
+    staff: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    request = await db.scalar(
+        select(DepositRequest)
+        .where(DepositRequest.id == request_id, DepositRequest.user_id == user_id)
+        .with_for_update()
+    )
+    if not request:
+        raise HTTPException(status_code=404, detail="Deposit request not found")
+    if request.status != "pending":
+        raise HTTPException(status_code=409, detail="Deposit request has already been reviewed")
+
+    request.decided_by = staff.id
+    request.decided_at = now()
+    if payload.decision == "reject":
+        request.status = "rejected"
+        db.add(
+            SupportMessage(
+                user_id=client.id,
+                sender="support",
+                body=(
+                    f"Your ${as_decimal(request.amount_usd).quantize(Decimal('0.01'))} "
+                    f"{request.asset} deposit request was not approved. Contact support if "
+                    "you need more information."
+                ),
+            )
+        )
+    else:
+        wallet = await owned_wallet(db, client.id, request.asset, lock=True)
+        amount_usd = as_decimal(request.amount_usd).quantize(Decimal("0.01"))
+        quantity = (amount_usd / as_decimal(wallet.price_usd)).quantize(
+            MONEY_EPSILON, rounding=ROUND_DOWN
+        )
+        wallet.balance = as_decimal(wallet.balance) + quantity
+        transaction = Transaction(
+            user_id=client.id,
+            kind="buy",
+            status="approved",
+            asset=request.asset,
+            amount=quantity,
+            usd_value=amount_usd,
+            title=f"Bought {request.asset}",
+            details={
+                "payment": "Support-approved deposit",
+                "deposit_request_id": str(request.id),
+                "staff_id": str(staff.id),
+                "environment": "development",
+            },
+        )
+        db.add(transaction)
+        await db.flush()
+        request.transaction_id = transaction.id
+        request.status = "approved"
+        db.add(
+            SupportMessage(
+                user_id=client.id,
+                sender="support",
+                body=(
+                    f"Your ${amount_usd} {request.asset} deposit request was verified and "
+                    "approved. The funds are now available in your wallet."
+                ),
+            )
+        )
     await db.commit()
     return {"client": await serialize_staff_client(db, client, detailed=True)}
 

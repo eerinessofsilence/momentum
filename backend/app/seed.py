@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Preference, SupportMessage, Transaction, User, Wallet
@@ -164,9 +164,50 @@ async def seed_staff_workspace(session: AsyncSession) -> None:
         ("Nora Hayes", "nora", "nora.hayes@example.com"),
         ("Ethan Cole", "ethan", "ethan.cole@example.com"),
         ("Mia Warren", "mia", "mia.warren@example.com"),
+        ("Amelia Hart", "amelia", "amelia.hart@example.com"),
+        ("Liam Brooks", "liam", "liam.brooks@example.com"),
+        ("Sofia Bennett", "sofia", "sofia.bennett@example.com"),
+        ("Noah Sinclair", "noah", "noah.sinclair@example.com"),
+        ("Emma Clarke", "emma", "emma.clarke@example.com"),
+        ("Lucas Meyer", "lucas", "lucas.meyer@example.com"),
+        ("Ava Mitchell", "ava", "ava.mitchell@example.com"),
+        ("Leo Foster", "leo", "leo.foster@example.com"),
+        ("Isla Morgan", "isla", "isla.morgan@example.com"),
+        ("Oscar Turner", "oscar", "oscar.turner@example.com"),
+        ("Maya Peterson", "maya", "maya.peterson@example.com"),
+        ("Henry Collins", "henry", "henry.collins@example.com"),
+        ("Chloe Evans", "chloe", "chloe.evans@example.com"),
+        ("Jack Sullivan", "jack", "jack.sullivan@example.com"),
+        ("Lily Cooper", "lily", "lily.cooper@example.com"),
+        ("Daniel Reed", "daniel", "daniel.reed@example.com"),
+        ("Grace Walker", "grace", "grace.walker@example.com"),
+        ("Theo Harrison", "theo", "theo.harrison@example.com"),
+        ("Zoe Palmer", "zoe", "zoe.palmer@example.com"),
+        ("James Carter", "james", "james.carter@example.com"),
+        ("Ella Richardson", "ella", "ella.richardson@example.com"),
+        ("Max Wilson", "max", "max.wilson@example.com"),
+        ("Ruby Anderson", "ruby", "ruby.anderson@example.com"),
+        ("Alexander King", "alexander", "alexander.king@example.com"),
+        ("Freya Scott", "freya", "freya.scott@example.com"),
+        ("Benjamin Young", "benjamin", "benjamin.young@example.com"),
+        ("Alice Green", "alice", "alice.green@example.com"),
+        ("Samuel Baker", "samuel", "samuel.baker@example.com"),
+        ("Eva Phillips", "eva", "eva.phillips@example.com"),
+        ("Arthur Campbell", "arthur", "arthur.campbell@example.com"),
+        ("Hannah Parker", "hannah", "hannah.parker@example.com"),
+        ("George Edwards", "george", "george.edwards@example.com"),
+        ("Layla Morris", "layla", "layla.morris@example.com"),
+        ("Finn Roberts", "finn", "finn.roberts@example.com"),
+        ("Nina Stewart", "nina", "nina.stewart@example.com"),
+        ("Adam Bell", "adam", "adam.bell@example.com"),
+        ("Clara Murphy", "clara", "clara.murphy@example.com"),
+        ("Ryan Bailey", "ryan", "ryan.bailey@example.com"),
+        ("Elena Rivera", "elena", "elena.rivera@example.com"),
     ]
     for name, username, email in demo_clients:
-        if await session.scalar(select(User).where(User.username == username)):
+        if await session.scalar(
+            select(User).where(or_(User.username == username, User.email == email))
+        ):
             continue
         client = User(
             name=name,

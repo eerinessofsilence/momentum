@@ -1,4 +1,5 @@
 export type Theme = 'dark' | 'light'
+export type ClientLocale = 'en' | 'fr' | 'es' | 'de'
 export type ProfileStatus = 'active' | 'suspended' | 'archived'
 
 export type User = {
@@ -9,9 +10,13 @@ export type User = {
   created_at: string
   theme: Theme
   sounds: boolean
+  language: ClientLocale
   is_staff: boolean
   impersonating: boolean
   account_status: ProfileStatus
+  daily_send_limit: string
+  monthly_send_limit: string
+  manual_review_threshold: string
   verification: VerificationStatus
 }
 
@@ -35,8 +40,10 @@ export type Transaction = {
   amount: string
   usd_value: string
   title: string
-  details: Record<string, string | boolean>
+  details: Record<string, string | number | boolean>
   created_at: string
+  effective_at: string
+  editable: boolean
 }
 
 export type DashboardData = {
@@ -57,6 +64,15 @@ export type SupportMessage = {
 }
 
 export type ActionKind = 'receive' | 'send' | 'buy' | 'swap'
+
+export type DepositRequest = {
+  id: number
+  asset: string
+  amount_usd: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  decided_at: string | null
+}
 
 export type StaffClientSummary = {
   id: number
@@ -83,10 +99,16 @@ export type ConfirmationCode = {
 }
 
 export type StaffClient = StaffClientSummary & {
+  daily_send_limit: string
+  monthly_send_limit: string
+  manual_review_threshold: string
+  theme: Theme
+  sounds: boolean
   wallets: Wallet[]
   transactions: Transaction[]
   messages: SupportMessage[]
   codes: ConfirmationCode[]
+  deposit_requests: DepositRequest[]
 }
 
 export type VerificationState = 'locked' | 'verification' | 'processing' | 'completed'

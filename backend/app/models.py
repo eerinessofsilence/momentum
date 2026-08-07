@@ -42,6 +42,15 @@ class User(Base):
         String(20), default="completed", server_default="completed", index=True
     )
     processing_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    daily_send_limit: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), default=Decimal("1000"), server_default="1000"
+    )
+    monthly_send_limit: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), default=Decimal("50000"), server_default="50000"
+    )
+    manual_review_threshold: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2), default=Decimal("10000"), server_default="10000"
+    )
     is_staff: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -101,6 +110,7 @@ class Transaction(Base):
     title: Mapped[str] = mapped_column(String(120))
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    effective_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class DemoTransfer(Base):
@@ -120,6 +130,24 @@ class DemoTransfer(Base):
     used_codes: Mapped[int] = mapped_column(Integer, default=0)
     processing_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class DepositRequest(Base):
+    __tablename__ = "deposit_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    asset: Mapped[str] = mapped_column(String(10))
+    amount_usd: Mapped[Decimal] = mapped_column(Numeric(20, 2))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class SupportAttachment(Base):
@@ -157,6 +185,7 @@ class Preference(Base):
     )
     theme: Mapped[str] = mapped_column(String(10), default="dark")
     sounds: Mapped[bool] = mapped_column(Boolean, default=True)
+    language: Mapped[str] = mapped_column(String(5), default="en", server_default="en")
     last_support_read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="preferences")

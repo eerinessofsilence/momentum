@@ -228,6 +228,20 @@ export function Tabs<T extends string>({
       ref={listRef}
       className={cx("ui-tabs", `ui-tabs--${variant}`, className)}
       role="tablist"
+      onKeyDown={(event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+        const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+        if (current < 0) return;
+        event.preventDefault();
+        const next = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? tabs.length - 1
+            : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        tabs[next]?.focus();
+        if (items[next]) onChange(items[next].value);
+      }}
       aria-label={ariaLabel}>
       {indicator && (
         <span
@@ -246,6 +260,7 @@ export function Tabs<T extends string>({
           type="button"
           role="tab"
           aria-selected={item.value === value}
+          tabIndex={item.value === value ? 0 : -1}
           className={item.value === value ? "active" : ""}
           key={item.value}
           onClick={() => onChange(item.value)}>
@@ -320,7 +335,10 @@ export function Notice({
   className?: string;
 }) {
   return (
-    <div className={cx("ui-notice", `ui-notice--${variant}`, className)} role={variant === "danger" ? "alert" : undefined}>
+    <div
+      className={cx("ui-notice", `ui-notice--${variant}`, className)}
+      role={variant === "danger" ? "alert" : "status"}
+      aria-live={variant === "danger" ? "assertive" : "polite"}>
       {icon}
       <div>{children}</div>
     </div>

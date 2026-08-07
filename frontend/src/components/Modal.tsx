@@ -13,6 +13,7 @@ export function Modal({
   title,
   children,
   onClose,
+  closeLabel,
   wide = false,
 }: {
   title: string
@@ -23,6 +24,7 @@ export function Modal({
    */
   children: ReactNode | ((close: () => void) => ReactNode)
   onClose: () => void
+  closeLabel: string
   wide?: boolean
 }) {
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -89,7 +91,7 @@ export function Modal({
           className="modal-header"
           title={title}
           titleId="modal-title"
-          trailing={<Button variant="ghost" size="small" className="icon-button" onClick={requestClose} aria-label="Close dialog"><X size={20} /></Button>}
+          trailing={<Button variant="ghost" size="small" className="icon-button" onClick={requestClose} aria-label={closeLabel}><X size={20} /></Button>}
         />
         {typeof children === 'function' ? children(requestClose) : children}
       </div>

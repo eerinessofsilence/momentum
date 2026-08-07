@@ -2,10 +2,12 @@ import { ArrowDown as ArrowDownToLine, ArrowUpRight, CurrencyDollar as CircleDol
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
+import { localizeClientError, useClientI18n } from "../clientI18n";
 import { useShell } from "../components/AppShell";
-import { LoadingPanel, PageHeading, TransactionRow, WalletRow } from "../components/PageParts";
-import { Card, CardHeader, Notice, Tabs } from "../components/UI";
+import { AsyncState, PageHeading, TransactionRow, WalletRow } from "../components/PageParts";
+import { Card, CardHeader, Tabs } from "../components/UI";
 import { money } from "../format";
+import { navigate } from "../router";
 import type { DashboardData, DashboardPeriod } from "../types";
 
 const periods: DashboardPeriod[] = ["1H", "24H", "1W", "1M", "ALL"];
@@ -17,16 +19,21 @@ function initialPeriod(): DashboardPeriod {
 
 export function OverviewPage() {
   const { user } = useAuth();
+  const { locale, t } = useClientI18n();
   const { openAction } = useShell();
   const [data, setData] = useState<DashboardData | null>(null);
   const [period, setPeriod] = useState<DashboardPeriod>(initialPeriod);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
+    setLoading(true);
+    setError("");
     api<DashboardData>("/dashboard")
       .then(setData)
-      .catch((err: Error) => setError(err.message));
-  }, []);
+      .catch((err: Error) => setError(localizeClientError(err.message, locale)))
+      .finally(() => setLoading(false));
+  }, [locale]);
 
   useEffect(() => {
     load();
@@ -36,8 +43,8 @@ export function OverviewPage() {
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  }, []);
+    return hour < 12 ? t("goodMorning") : hour < 18 ? t("goodAfternoon") : t("goodEvening");
+  }, [t]);
 
   const selectPeriod = (nextPeriod: DashboardPeriod) => {
     setPeriod(nextPeriod);
@@ -48,41 +55,39 @@ export function OverviewPage() {
     <div className="page-content overview-page">
       <PageHeading
         title={`${greeting}, ${user?.name}`}
-        description="Here’s a snapshot of your portfolio."
+        description={t("portfolioSnapshot")}
       />
-      {error && <Notice variant="danger">{error}</Notice>}
-      {!data ? (
-        <LoadingPanel />
-      ) : (
+      <AsyncState loading={loading} error={error} retryLabel={t("retry")} onRetry={load}>
+      {data ? (
         <>
           <section className="balance-card">
             <div className="balance-content">
-              <span className="balance-label">Total portfolio value</span>
+              <span className="balance-label">{t("totalPortfolio")}</span>
               <h2>{money(data.total_balance)}</h2>
               <div className="quick-actions">
                 <button onClick={() => openAction("receive")}>
                   <span>
                     <ArrowDownToLine size={24} />
                   </span>
-                  <strong>Receive</strong>
+                  <strong>{t("receive")}</strong>
                 </button>
                 <button onClick={() => openAction("send")}>
                   <span>
                     <ArrowUpRight size={24} />
                   </span>
-                  <strong>Send</strong>
+                  <strong>{t("send")}</strong>
                 </button>
                 <button onClick={() => openAction("buy")}>
                   <span>
                     <CircleDollarSign size={24} />
                   </span>
-                  <strong>Buy</strong>
+                  <strong>{t("buy")}</strong>
                 </button>
                 <button onClick={() => openAction("swap")}>
                   <span>
                     <RefreshCw size={24} />
                   </span>
-                  <strong>Swap</strong>
+                  <strong>{t("swap")}</strong>
                 </button>
               </div>
               <span
@@ -96,11 +101,13 @@ export function OverviewPage() {
               key={period}
               values={data.periods[period].values}
               positive={Number(data.periods[period].change) >= 0}
+              label={t("portfolioValueChart")}
             />
+            <span className="balance-card__lower-accent" aria-hidden="true" />
             <Tabs
               className="period-switcher"
               variant="compact"
-              ariaLabel="Portfolio chart period"
+              ariaLabel={t("chartPeriod")}
               value={period}
               onChange={selectPeriod}
               items={periods.map((item) => ({ value: item, label: item }))}
@@ -108,7 +115,7 @@ export function OverviewPage() {
           </section>
           <div className="overview-grid">
             <Card className="panel-card">
-              <CardHeader title="Portfolio" trailing={<span>{data.wallets.length} chains</span>} />
+              <CardHeader title={t("portfolio")} trailing={<span>{data.wallets.length} {t("chains")}</span>} />
               <div className="panel-list">
                 {data.wallets.map((wallet) => (
                   <WalletRow key={wallet.id} wallet={wallet} compact />
@@ -116,7 +123,7 @@ export function OverviewPage() {
               </div>
             </Card>
             <Card className="panel-card recent-card">
-              <CardHeader title="Recent transactions" trailing={<a href="/app/history">View all</a>} />
+              <CardHeader title={t("recentTransactions")} trailing={<a href="/app/history" onClick={(event) => { event.preventDefault(); navigate('/app/history') }}>{t("viewAll")}</a>} />
               <div className="panel-list">
                 {data.transactions.slice(0, 4).map((transaction) => (
                   <TransactionRow key={transaction.id} transaction={transaction} compact />
@@ -125,12 +132,13 @@ export function OverviewPage() {
             </Card>
           </div>
         </>
-      )}
+      ) : null}
+      </AsyncState>
     </div>
   );
 }
 
-function BalanceChart({ values, positive }: { values: string[]; positive: boolean }) {
+function BalanceChart({ values, positive, label }: { values: string[]; positive: boolean; label: string }) {
   const width = 1200;
   const height = 190;
   const numbers = values.map(Number);
@@ -151,7 +159,7 @@ function BalanceChart({ values, positive }: { values: string[]; positive: boolea
       className="balance-chart"
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      aria-label="Portfolio value chart">
+      aria-label={label}>
       <defs>
         <linearGradient id="chart-area" x1="0" y1="0" x2="0" y2="1">
           <stop stopColor={areaColor} stopOpacity={positive ? ".26" : ".35"} />
