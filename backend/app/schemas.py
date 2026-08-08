@@ -78,8 +78,14 @@ class SwapInput(BaseModel):
 
 class StaffBalanceInput(BaseModel):
     asset: str
-    action: Literal["credit"] = "credit"
-    amount: Decimal = Field(gt=0, max_digits=28, decimal_places=8)
+    action: Literal["credit", "set"] = "credit"
+    amount: Decimal = Field(ge=0, max_digits=28, decimal_places=8)
+
+    @model_validator(mode="after")
+    def validate_credit_amount(self) -> "StaffBalanceInput":
+        if self.action == "credit" and self.amount <= 0:
+            raise ValueError("Credit amount must be greater than zero")
+        return self
 
 
 class StaffTransactionUpdateInput(BaseModel):

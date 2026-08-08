@@ -23,7 +23,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1634,20 +1634,64 @@ async def staff_adjust_balance(
     symbol = require_asset(payload.asset)
     wallet = await owned_wallet(db, client.id, symbol, lock=True)
     amount = as_decimal(payload.amount).quantize(MONEY_EPSILON, rounding=ROUND_DOWN)
-    wallet.balance = as_decimal(wallet.balance) + amount
+    current_balance = as_decimal(wallet.balance)
+    adjustment = amount if payload.action == "credit" else amount - current_balance
+    wallet.balance = current_balance + adjustment
+    if not adjustment:
+        await db.commit()
+        return {"client": await serialize_staff_client(db, client, detailed=True)}
     transaction = Transaction(
         user_id=client.id,
-        kind="receive",
+        kind="receive" if payload.action == "credit" else "adjustment",
         status="approved",
         asset=symbol,
-        amount=amount,
-        usd_value=(amount * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
-        title=f"Received {symbol}",
-        details={"staff_id": staff.id, "reason": "Manual account adjustment"},
+        amount=adjustment,
+        usd_value=(adjustment * as_decimal(wallet.price_usd)).quantize(Decimal("0.01")),
+        title=f"Received {symbol}" if payload.action == "credit" else f"Adjusted {symbol} balance",
+        details={
+            "staff_id": staff.id,
+            "reason": (
+                "Manual account adjustment"
+                if payload.action == "credit"
+                else "Manual balance override"
+            ),
+            **({"balance_after": str(amount)} if payload.action == "set" else {}),
+        },
     )
     db.add(transaction)
     await db.commit()
     return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
+@app.delete("/api/staff/clients/{user_id}", status_code=204)
+async def staff_delete_client(
+    user_id: int,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    client = await db.scalar(
+        select(User).where(User.id == user_id, User.is_staff.is_(False)).with_for_update()
+    )
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Keep deletion reliable in the SQLite test environment as well as in
+    # PostgreSQL, where the foreign keys also enforce these cascades.
+    for model in (
+        SupportMessage,
+        SupportAttachment,
+        ConfirmationCode,
+        DemoTransfer,
+        DepositRequest,
+        Session,
+        Transaction,
+        Preference,
+        Wallet,
+    ):
+        await db.execute(delete(model).where(model.user_id == client.id))
+    await db.delete(client)
+    await db.commit()
+    return Response(status_code=204)
 
 
 @app.post("/api/staff/clients/{user_id}/deposit-requests/{request_id}/decision")

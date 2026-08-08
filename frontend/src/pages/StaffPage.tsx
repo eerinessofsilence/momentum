@@ -121,6 +121,7 @@ function groupDigits(code: string) {
 }
 
 function transactionTitle(item: Transaction, t: StaffTranslator) {
+  if (item.kind === "adjustment") return t("adjustedAsset", { asset: item.asset });
   if (item.kind === "receive") return t("receivedAsset", { asset: item.asset });
   if (item.kind === "send") return t("sentAsset", { asset: item.asset });
   if (item.kind === "buy") return t("boughtAsset", { asset: item.asset });
@@ -245,7 +246,7 @@ function AdjustBalanceModal({
   onSaved: (client: StaffClient) => void;
 }) {
   const { t } = useStaffI18n();
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(wallet.balance);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const submit = async (event: FormEvent) => {
@@ -255,7 +256,7 @@ function AdjustBalanceModal({
     try {
       const result = await api<{ client: StaffClient }>(`/staff/clients/${client.id}/balance`, {
         method: "POST",
-        body: JSON.stringify({ asset: wallet.symbol, action: "credit", amount })
+        body: JSON.stringify({ asset: wallet.symbol, action: "set", amount })
       });
       onSaved(result.client);
     } catch (err) {
@@ -286,7 +287,7 @@ function AdjustBalanceModal({
             </div>
           </div>
           <Field
-            label={`${t("amountIn")} ${wallet.symbol}`}
+            label={`${t("balanceAmount")} ${wallet.symbol}`}
             hint={`${t("currentBalance")}: ${assetAmount(wallet.balance, wallet.symbol)}`}>
             <div className="amount-field">
               <Input
@@ -305,8 +306,8 @@ function AdjustBalanceModal({
           {error && <Notice variant="danger">{error}</Notice>}
           <div className="modal-actions">
             <Button onClick={close}>{t("cancel")}</Button>
-            <Button type="submit" variant="primary" disabled={busy || !Number(amount)}>
-              {busy ? t("applying") : t("applyCredit")}
+            <Button type="submit" variant="primary" disabled={busy || amount === "" || Number(amount) < 0}>
+              {busy ? t("applying") : t("setBalance")}
             </Button>
           </div>
         </form>
@@ -568,11 +569,13 @@ function TemporaryPasswordModal({
 function ClientSettingsModal({
   client,
   onClose,
-  onSaved
+  onSaved,
+  onDelete
 }: {
   client: StaffClient;
   onClose: () => void;
   onSaved: (client: StaffClient) => void;
+  onDelete: () => Promise<void>;
 }) {
   const { t } = useStaffI18n();
   const [name, setName] = useState(client.name);
@@ -583,6 +586,7 @@ function ClientSettingsModal({
   const [reviewThreshold, setReviewThreshold] = useState(client.manual_review_threshold);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -609,8 +613,17 @@ function ClientSettingsModal({
       setBusy(false);
     }
   };
+  const deleteClient = async () => {
+    if (!window.confirm(t("deleteAccountConfirm"))) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+    }
+  };
   return (
-    <Modal title={t("editSettings")} closeLabel={t("closeDialog")} onClose={onClose}>
+    <Modal title={t("editSettings")} closeLabel={t("closeDialog")} onClose={onClose} wide>
       {(close) => (
         <form className="modal-body staff-settings-form" onSubmit={submit}>
           <div className="staff-settings-grid">
@@ -657,11 +670,16 @@ function ClientSettingsModal({
             />
           </Field>
           {error && <Notice variant="danger">{error}</Notice>}
-          <div className="modal-actions">
-            <Button onClick={close}>{t("cancel")}</Button>
-            <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? t("saving") : t("saveSettings")}
-            </Button>
+          <div className="staff-settings-actions">
+            <button type="button" className="staff-settings-delete" onClick={deleteClient} disabled={busy || deleting}>
+              {deleting ? t("deletingAccount") : t("deleteAccount")}
+            </button>
+            <div className="modal-actions">
+              <Button onClick={close} disabled={deleting}>{t("cancel")}</Button>
+              <Button type="submit" variant="primary" disabled={busy || deleting}>
+                {busy ? t("saving") : t("saveSettings")}
+              </Button>
+            </div>
           </div>
         </form>
       )}
@@ -1400,6 +1418,16 @@ export function StaffPage() {
       setOpeningClient(false);
     }
   };
+  const deleteSelectedClient = async () => {
+    if (!client) return;
+    await api(`/staff/clients/${client.id}`, { method: "DELETE" });
+    setClient(null);
+    setSelectedId(null);
+    setMobileDetail(false);
+    setSettingsOpen(false);
+    await loadClients(query, page);
+    notify(t("accountDeletedPermanently"));
+  };
 
   return (
     <StaffI18nProvider value={{ locale, t }}>
@@ -1671,6 +1699,7 @@ export function StaffPage() {
             loadClients(query, page);
             notify(t("settingsUpdated"));
           }}
+          onDelete={deleteSelectedClient}
         />
       )}
       {credentials && (

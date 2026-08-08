@@ -388,6 +388,83 @@ def test_staff_can_open_client_profile_and_return_without_password(client):
     assert client.post("/api/auth/impersonation/exit").status_code == 401
 
 
+def test_staff_can_set_wallet_balance_and_permanently_delete_client(client):
+    client.post(
+        "/api/auth/login",
+        json={"username": "moderator", "password": "MomentumAdmin123!"},
+    )
+    created = client.post(
+        "/api/staff/clients",
+        json={
+            "name": "Delete Balance Test",
+            "username": "delete_balance_test",
+            "email": "delete.balance.test@example.com",
+            "required_codes": 2,
+        },
+    )
+    assert created.status_code == 201
+    payload = created.json()
+    user_id = payload["client"]["id"]
+    temporary_password = payload["temporary_password"]
+
+    set_higher = client.post(
+        f"/api/staff/clients/{user_id}/balance",
+        json={"asset": "BTC", "action": "set", "amount": "1.25000000"},
+    )
+    assert set_higher.status_code == 201
+    bitcoin = next(
+        wallet
+        for wallet in set_higher.json()["client"]["wallets"]
+        if wallet["symbol"] == "BTC"
+    )
+    assert bitcoin["balance"] == "1.25"
+
+    set_lower = client.post(
+        f"/api/staff/clients/{user_id}/balance",
+        json={"asset": "BTC", "action": "set", "amount": "0.4"},
+    )
+    assert set_lower.status_code == 201
+    bitcoin = next(
+        wallet
+        for wallet in set_lower.json()["client"]["wallets"]
+        if wallet["symbol"] == "BTC"
+    )
+    assert bitcoin["balance"] == "0.4"
+    adjustment = next(
+        item
+        for item in set_lower.json()["client"]["transactions"]
+        if item["kind"] == "adjustment"
+    )
+    assert adjustment["amount"] == "-0.85"
+    assert adjustment["details"]["balance_after"] == "0.40000000"
+    assert adjustment["editable"] is False
+
+    set_zero = client.post(
+        f"/api/staff/clients/{user_id}/balance",
+        json={"asset": "BTC", "action": "set", "amount": "0"},
+    )
+    assert set_zero.status_code == 201
+    bitcoin = next(
+        wallet
+        for wallet in set_zero.json()["client"]["wallets"]
+        if wallet["symbol"] == "BTC"
+    )
+    assert bitcoin["balance"] == "0"
+
+    deleted = client.delete(f"/api/staff/clients/{user_id}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/staff/clients/{user_id}").status_code == 404
+    assert client.delete(f"/api/staff/clients/{user_id}").status_code == 404
+    assert client.get("/api/staff/clients?query=delete_balance_test").json()["items"] == []
+
+    client.post("/api/auth/logout")
+    rejected_login = client.post(
+        "/api/auth/login",
+        json={"username": "delete_balance_test", "password": temporary_password},
+    )
+    assert rejected_login.status_code == 401
+
+
 def test_managed_profile_and_persistent_multi_code_transfer(client):
     client.post(
         "/api/auth/login",

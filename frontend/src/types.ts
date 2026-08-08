@@ -34,7 +34,7 @@ export type Wallet = {
 
 export type Transaction = {
   id: number
-  kind: 'receive' | 'send' | 'buy' | 'swap' | 'withdrawal'
+  kind: 'receive' | 'send' | 'buy' | 'swap' | 'withdrawal' | 'adjustment'
   status: 'approved' | 'pending' | 'failed'
   asset: string
   amount: string
