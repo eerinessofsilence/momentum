@@ -89,9 +89,12 @@ async def lifespan(_: FastAPI):
     if engine.dialect.name == "sqlite":
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
-    async with SessionLocal() as session:
-        await seed_demo_user(session)
-        await seed_staff_workspace(session)
+    # The demo user and the fixed staff-workspace client roster are sandbox
+    # fixtures, not real accounts — only seed them when running as a demo.
+    if settings.demo_mode:
+        async with SessionLocal() as session:
+            await seed_demo_user(session)
+            await seed_staff_workspace(session)
     price_task = (
         asyncio.create_task(price_refresh_loop(SessionLocal))
         if settings.price_refresh_enabled

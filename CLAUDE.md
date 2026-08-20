@@ -79,7 +79,10 @@ I001 violations. Those are historical migrations — leave them alone and lint
 
 ## Seeded Accounts
 
-Created on every API startup by `backend/app/seed.py` (idempotent).
+Created on every API startup by `backend/app/seed.py` (idempotent), but only
+when `DEMO_MODE=true` — production (`DEMO_MODE=false`) skips this seeding
+entirely, so a fresh production database has no accounts until someone
+registers or one is provisioned manually.
 
 | Role | Username | Password |
 | --- | --- | --- |
