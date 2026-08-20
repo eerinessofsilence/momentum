@@ -27,6 +27,13 @@ def make_otp() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
+def make_client_number() -> int:
+    while True:
+        candidate = 100_000 + secrets.randbelow(900_000)
+        if candidate % 10 != 0:
+            return candidate
+
+
 def make_temporary_password(length: int = 18) -> str:
     alphabet = string.ascii_letters + string.digits
     return "M!" + "".join(secrets.choice(alphabet) for _ in range(length - 2))

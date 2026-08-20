@@ -6,7 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Preference, SupportMessage, Transaction, User, Wallet
-from .security import hash_password
+from .security import hash_password, make_client_number
 
 ASSETS = [
     {
@@ -53,6 +53,14 @@ def account_address(symbol: str, user_id: int) -> str:
     if symbol == "USDT":
         return f"TsnWxe1CcA{user_id:04d}rEzbWAMomentumVault"
     return f"EQuByp1Unb{user_id:04d}zD0-vVMomentumVault"
+
+
+async def assign_client_number(session: AsyncSession) -> int:
+    while True:
+        candidate = make_client_number()
+        taken = await session.scalar(select(User.id).where(User.client_number == candidate))
+        if not taken:
+            return candidate
 
 
 async def provision_user(session: AsyncSession, user: User, seed_demo_data: bool = False) -> None:
@@ -135,6 +143,7 @@ async def seed_demo_user(session: AsyncSession) -> None:
         username="demo",
         email="demo@momentum.local",
         password_hash=hash_password("Momentum123!"),
+        client_number=await assign_client_number(session),
     )
     session.add(user)
     await session.flush()
@@ -151,6 +160,7 @@ async def seed_staff_workspace(session: AsyncSession) -> None:
             email="operations@momentum.local",
             password_hash=hash_password("MomentumAdmin123!"),
             is_staff=True,
+            client_number=await assign_client_number(session),
         )
         session.add(staff)
         await session.flush()
@@ -214,6 +224,7 @@ async def seed_staff_workspace(session: AsyncSession) -> None:
             username=username,
             email=email,
             password_hash=hash_password("Momentum123!"),
+            client_number=await assign_client_number(session),
         )
         session.add(client)
         await session.flush()

@@ -87,7 +87,7 @@ export function SettingsPage() {
           {editing ? <EditableSettingRow label={t('name')}><Input className="settings-text-input settings-text-input--short" controlSize="small" value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required /></EditableSettingRow> : <SettingRow label={t('name')} value={user?.name || ''} />}
           {editing ? <EditableSettingRow label={t('username')}><div className="settings-username-input"><span>@</span><Input controlSize="small" value={username} onChange={(event) => setUsername(event.target.value.replace(/[^A-Za-z0-9_]/g, ''))} minLength={3} maxLength={40} autoCapitalize="none" required /></div></EditableSettingRow> : <SettingRow label={t('username')} value={`@${user?.username}`} />}
           {editing ? <EditableSettingRow label={t('email')}><Input className="settings-text-input settings-text-input--email" controlSize="small" type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} autoCapitalize="none" required /></EditableSettingRow> : <SettingRow label={t('email')} value={user?.email || ''} />}
-          <SettingRow label={t('accountId')} value={`#${String(user?.id || 0).padStart(4, '0')}`} />
+          <SettingRow label={t('accountId')} value={`#${user?.client_number || ''}`} />
           <SettingRow label={t('memberSince')} value={user ? new Date(user.created_at).toLocaleString(locale) : ''} />
         </SettingsSection>
         <SettingsSection title={t('networkLimits')}>

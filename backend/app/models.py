@@ -28,6 +28,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_number: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(80))
     username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)

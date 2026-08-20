@@ -1091,7 +1091,7 @@ function ClientOverview({
             </div>
             <div>
               <dt>{t("clientId")}</dt>
-              <dd>#{client.id.toString().padStart(5, "0")}</dd>
+              <dd>#{client.client_number}</dd>
             </div>
           </dl>
           <div className="profile-actions">

@@ -4,6 +4,7 @@ export type ProfileStatus = 'active' | 'suspended' | 'archived'
 
 export type User = {
   id: number
+  client_number: number
   name: string
   username: string
   email: string
@@ -76,6 +77,7 @@ export type DepositRequest = {
 
 export type StaffClientSummary = {
   id: number
+  client_number: number
   name: string
   account_status: ProfileStatus
   username: string

@@ -70,7 +70,7 @@ from .security import (
     token_hash,
     verify_password,
 )
-from .seed import provision_user, seed_demo_user, seed_staff_workspace
+from .seed import assign_client_number, provision_user, seed_demo_user, seed_staff_workspace
 
 COOKIE_NAME = "momentum_session"
 STAFF_COOKIE_NAME = "momentum_staff_session"
@@ -147,6 +147,7 @@ def serialize_user(
 ) -> dict:
     return {
         "id": user.id,
+        "client_number": user.client_number,
         "name": "Demo" if user.username.lower() == "demo" else user.name,
         "username": user.username,
         "email": user.email,
@@ -407,6 +408,7 @@ async def register(
         username=payload.username.strip().lower(),
         email=payload.email.lower(),
         password_hash=hash_password(payload.password),
+        client_number=await assign_client_number(db),
     )
     db.add(user)
     try:
@@ -1171,6 +1173,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
     )
     result = {
         "id": user.id,
+        "client_number": user.client_number,
         "name": user.name,
         "account_status": user.account_status,
         "username": user.username,
@@ -1273,6 +1276,7 @@ def serialize_staff_client_summary(
 ) -> dict:
     return {
         "id": user.id,
+        "client_number": user.client_number,
         "name": user.name,
         "account_status": user.account_status,
         "username": user.username,
@@ -1309,6 +1313,7 @@ async def staff_create_client(
         verification_target=payload.required_codes,
         verification_used=0,
         verification_state="locked" if payload.required_codes else "completed",
+        client_number=await assign_client_number(db),
     )
     db.add(user)
     try:
