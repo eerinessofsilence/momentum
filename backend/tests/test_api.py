@@ -288,6 +288,7 @@ def test_staff_workspace_is_role_protected_and_operational(client):
     updated_settings = client.patch(
         f"/api/staff/clients/{target['id']}/settings",
         json={
+            "profile_label": "VIP · referred by Nora",
             "name": "Mia Settings",
             "username": "mia_settings",
             "email": "mia.settings@example.com",
@@ -302,6 +303,7 @@ def test_staff_workspace_is_role_protected_and_operational(client):
     saved_client = updated_settings.json()["client"]
     assert saved_client["name"] == "Mia Settings"
     assert saved_client["username"] == "mia_settings"
+    assert saved_client["profile_label"] == "VIP · referred by Nora"
     assert saved_client["daily_send_limit"] == "2500.00"
     assert saved_client["monthly_send_limit"] == "75000.00"
     assert saved_client["manual_review_threshold"] == "12500.00"
@@ -396,6 +398,7 @@ def test_staff_can_set_wallet_balance_and_permanently_delete_client(client):
     created = client.post(
         "/api/staff/clients",
         json={
+            "profile_label": "Delete Balance Test",
             "name": "Delete Balance Test",
             "username": "delete_balance_test",
             "email": "delete.balance.test@example.com",
@@ -478,6 +481,7 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     created = client.post(
         "/api/staff/clients",
         json={
+            "profile_label": "Olena · campaign 1",
             "name": "Olena",
             "username": "olena_managed_1",
             "email": "olena.managed.1@example.com",
@@ -487,6 +491,7 @@ def test_managed_profile_and_persistent_multi_code_transfer(client):
     assert created.status_code == 201
     payload = created.json()
     assert payload["client"]["name"] == "Olena"
+    assert payload["client"]["profile_label"] == "Olena · campaign 1"
     assert payload["client"]["verification_required"] == 2
     assert len(payload["client"]["codes"]) == 2
     assert [item["id"] for item in payload["client"]["codes"]] == sorted(
@@ -574,6 +579,7 @@ def test_staff_can_manage_real_profile_statuses(client):
     created = client.post(
         "/api/staff/clients",
         json={
+            "profile_label": "Status Test",
             "name": "Status Test",
             "username": "status_test_client",
             "email": "status.test@example.com",
@@ -641,6 +647,7 @@ def test_staff_verification_change_updates_active_transfer(client):
     created = client.post(
         "/api/staff/clients",
         json={
+            "profile_label": "Code Sync",
             "name": "Code Sync",
             "username": "code_sync_client",
             "email": "code.sync@example.com",

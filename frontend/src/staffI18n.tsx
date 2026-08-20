@@ -46,6 +46,7 @@ const en = {
   adjustedAsset: 'Adjusted {asset} balance', receivedAsset: 'Received {asset}', sentAsset: 'Sent {asset}', boughtAsset: 'Bought {asset}', swappedAssets: 'Swapped {asset} to {target}', withdrawalAsset: 'Withdrew {asset}',
   deleteAccount: 'Delete account', deletingAccount: 'Deleting…', deleteAccountConfirm: 'Permanently delete this client account and all of its data? This action cannot be undone.', accountDeletedPermanently: 'Client account permanently deleted',
   loadingOperations: 'Loading Operations…', closeDialog: 'Close dialog', unexpectedError: 'Something went wrong. Try again.',
+  note: 'Note', notePlaceholder: 'e.g. VIP · referred by Nora', noteHint: 'Internal only — searchable, never shown to the client.',
 } as const
 
 type StaffTextKey = keyof typeof en
@@ -90,6 +91,7 @@ const ru: Record<StaffTextKey, string> = {
   adjustedAsset: 'Скорректирован баланс {asset}', receivedAsset: 'Получено {asset}', sentAsset: 'Отправлено {asset}', boughtAsset: 'Куплено {asset}', swappedAssets: 'Обмен {asset} на {target}', withdrawalAsset: 'Выведено {asset}',
   deleteAccount: 'Удалить аккаунт', deletingAccount: 'Удаляем…', deleteAccountConfirm: 'Навсегда удалить аккаунт клиента и все его данные? Это действие нельзя отменить.', accountDeletedPermanently: 'Аккаунт клиента удалён навсегда',
   loadingOperations: 'Загрузка Operations…', closeDialog: 'Закрыть окно', unexpectedError: 'Что-то пошло не так. Попробуйте ещё раз.',
+  note: 'Заметка', notePlaceholder: 'Например: VIP · по рекомендации Норы', noteHint: 'Только для внутреннего поиска — клиент её не видит.',
 }
 
 const uk: Record<StaffTextKey, string> = {
@@ -129,6 +131,7 @@ const uk: Record<StaffTextKey, string> = {
   adjustedAsset: 'Скориговано баланс {asset}', receivedAsset: 'Отримано {asset}', sentAsset: 'Надіслано {asset}', boughtAsset: 'Придбано {asset}', swappedAssets: 'Обмін {asset} на {target}', withdrawalAsset: 'Виведено {asset}',
   deleteAccount: 'Видалити акаунт', deletingAccount: 'Видаляємо…', deleteAccountConfirm: 'Назавжди видалити акаунт клієнта та всі його дані? Цю дію не можна скасувати.', accountDeletedPermanently: 'Акаунт клієнта видалено назавжди',
   loadingOperations: 'Завантаження Operations…', closeDialog: 'Закрити вікно', unexpectedError: 'Щось пішло не так. Спробуйте ще раз.',
+  note: 'Примітка', notePlaceholder: 'Наприклад: VIP · за рекомендацією Нори', noteHint: 'Лише для внутрішнього пошуку — клієнт її не бачить.',
 }
 
 export function translateStaff(locale: StaffLocale, key: StaffTextKey, values?: Record<string, string | number>) {

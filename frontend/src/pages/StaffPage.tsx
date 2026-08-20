@@ -423,6 +423,7 @@ function CreateClientModal({
   onCreated: (client: StaffClient, password: string) => void;
 }) {
   const { t } = useStaffI18n();
+  const [profileLabel, setProfileLabel] = useState("");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -440,6 +441,7 @@ function CreateClientModal({
         {
           method: "POST",
           body: JSON.stringify({
+            profile_label: profileLabel,
             name,
             username,
             email,
@@ -458,12 +460,20 @@ function CreateClientModal({
     <Modal title={t("createClient")} closeLabel={t("closeDialog")} onClose={onClose}>
       {(close) => (
         <form className="modal-body space-y-4" onSubmit={submit}>
+          <Field label={t("note")} hint={t("noteHint")}>
+            <Input
+              value={profileLabel}
+              onChange={(event) => setProfileLabel(event.target.value)}
+              placeholder={t("notePlaceholder")}
+              autoFocus
+              required
+            />
+          </Field>
           <Field label={t("clientName")}>
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={t("namePlaceholder")}
-              autoFocus
               required
             />
           </Field>
@@ -578,6 +588,7 @@ function ClientSettingsModal({
   onDelete: () => Promise<void>;
 }) {
   const { t } = useStaffI18n();
+  const [profileLabel, setProfileLabel] = useState(client.profile_label || "");
   const [name, setName] = useState(client.name);
   const [username, setUsername] = useState(client.username);
   const [email, setEmail] = useState(client.email);
@@ -597,6 +608,7 @@ function ClientSettingsModal({
         {
           method: "PATCH",
           body: JSON.stringify({
+            profile_label: profileLabel,
             name,
             username,
             email,
@@ -626,6 +638,14 @@ function ClientSettingsModal({
     <Modal title={t("editSettings")} closeLabel={t("closeDialog")} onClose={onClose} wide>
       {(close) => (
         <form className="modal-body staff-settings-form" onSubmit={submit}>
+          <Field label={t("note")} hint={t("noteHint")}>
+            <Input
+              value={profileLabel}
+              onChange={(event) => setProfileLabel(event.target.value)}
+              placeholder={t("notePlaceholder")}
+              required
+            />
+          </Field>
           <div className="staff-settings-grid">
             <Field label={t("clientName")}>
               <Input value={name} onChange={(event) => setName(event.target.value)} required />
@@ -1067,6 +1087,10 @@ function ClientOverview({
             }
           />
           <dl>
+            <div>
+              <dt>{t("note")}</dt>
+              <dd>{client.profile_label || "—"}</dd>
+            </div>
             <div>
               <dt>{t("clientName")}</dt>
               <dd>{client.name}</dd>

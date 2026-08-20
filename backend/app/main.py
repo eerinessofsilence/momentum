@@ -710,7 +710,6 @@ async def update_account_settings(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     user.name = payload.name
-    user.profile_label = user.name
     user.username = payload.username.strip().lower()
     user.email = str(payload.email).lower()
     user.daily_send_limit = as_decimal(payload.daily_send_limit)
@@ -1178,6 +1177,7 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         "id": user.id,
         "client_number": user.client_number,
         "name": user.name,
+        "profile_label": user.profile_label,
         "account_status": user.account_status,
         "username": user.username,
         "email": user.email,
@@ -1281,6 +1281,7 @@ def serialize_staff_client_summary(
         "id": user.id,
         "client_number": user.client_number,
         "name": user.name,
+        "profile_label": user.profile_label,
         "account_status": user.account_status,
         "username": user.username,
         "email": user.email,
@@ -1307,9 +1308,7 @@ async def staff_create_client(
     temporary_password = make_temporary_password()
     user = User(
         name=payload.name.strip(),
-        # Retained internally for compatibility with existing databases; the
-        # staff product uses the client's actual name as its display name.
-        profile_label=payload.name.strip(),
+        profile_label=payload.profile_label.strip(),
         username=username,
         email=email,
         password_hash=hash_password(temporary_password),
@@ -1480,7 +1479,7 @@ async def staff_update_client_settings(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     client.name = payload.name.strip()
-    client.profile_label = client.name
+    client.profile_label = payload.profile_label.strip()
     client.username = payload.username.strip().lower()
     client.email = str(payload.email).lower()
     client.daily_send_limit = as_decimal(payload.daily_send_limit)
@@ -1523,6 +1522,7 @@ async def staff_clients(
                 func.lower(User.name).like(term),
                 func.lower(User.username).like(username_term),
                 func.lower(User.email).like(term),
+                func.lower(User.profile_label).like(term),
             )
         )
 

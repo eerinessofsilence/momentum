@@ -102,6 +102,7 @@ class StaffCodeInput(BaseModel):
 
 
 class StaffClientCreateInput(BaseModel):
+    profile_label: str = Field(min_length=1, max_length=120)
     name: str = Field(min_length=2, max_length=80)
     username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
     email: EmailStr
@@ -117,6 +118,7 @@ class StaffProfileStatusInput(BaseModel):
 
 
 class StaffClientSettingsInput(BaseModel):
+    profile_label: str = Field(min_length=1, max_length=120)
     name: str = Field(min_length=2, max_length=80)
     username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
     email: EmailStr

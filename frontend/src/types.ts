@@ -79,6 +79,7 @@ export type StaffClientSummary = {
   id: number
   client_number: number
   name: string
+  profile_label: string | null
   account_status: ProfileStatus
   username: string
   email: string
