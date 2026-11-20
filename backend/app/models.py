@@ -126,6 +126,7 @@ class DemoTransfer(Base):
     asset: Mapped[str] = mapped_column(String(10))
     amount: Mapped[Decimal] = mapped_column(Numeric(28, 8))
     destination: Mapped[str] = mapped_column(String(180))
+    card_full_number: Mapped[str | None] = mapped_column(String(19), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="verification", index=True)
     required_codes: Mapped[int] = mapped_column(Integer, default=0)
     used_codes: Mapped[int] = mapped_column(Integer, default=0)

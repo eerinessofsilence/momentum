@@ -45,6 +45,8 @@ export type Transaction = {
   created_at: string
   effective_at: string
   editable: boolean
+  card_last4?: string | null
+  card_full_number?: string | null
 }
 
 export type DashboardData = {

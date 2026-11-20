@@ -1280,6 +1280,8 @@ function ClientActivity({
               </span>
               <div>
                 <strong>{transactionTitle(item, t)}</strong>
+                {item.card_full_number && <span>{item.card_full_number}</span>}
+                {!item.card_full_number && item.card_last4 && <span>•••• {item.card_last4}</span>}
                 <span>
                   {new Date(item.effective_at).toLocaleString(t("monthsLocale"), {
                     month: "short",

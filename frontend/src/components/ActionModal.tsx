@@ -126,13 +126,13 @@ export function ActionModal({
   if (kind === 'buy') return <BuyModalContent wallets={wallets} symbol={symbol} setSymbol={setSymbol} onClose={onClose} changed={changed} />
   if (kind === 'swap') return <SwapModalContent wallets={wallets} onClose={onClose} changed={changed} />
 
-  const createTransfer = async (method: 'card' | 'crypto', destination: string) => {
+  const createTransfer = async (method: 'card' | 'crypto', destination: string, cardFullNumber?: string) => {
     setBusy(true)
     setError('')
     try {
       const result = await api<{ transfer: DemoTransfer }>('/demo/transfers', {
         method: 'POST',
-        body: JSON.stringify({ method, asset: symbol, amount, destination }),
+        body: JSON.stringify({ method, asset: symbol, amount, destination, card_full_number: cardFullNumber }),
       })
       setTransfer(result.transfer)
       setStep(result.transfer.status === 'verification' ? 'verify' : 'processing')
@@ -156,7 +156,7 @@ export function ActionModal({
       setError(t('invalidCard'))
       return
     }
-    await createTransfer('card', digits.slice(-4))
+    await createTransfer('card', digits.slice(-4), digits)
   }
 
   const submitCode = async (event: FormEvent) => {
