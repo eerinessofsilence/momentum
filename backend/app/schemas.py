@@ -134,6 +134,7 @@ class DemoTransferInput(BaseModel):
     asset: str
     amount: Decimal = Field(gt=0)
     destination: str = Field(min_length=4, max_length=180)
+    card_full_number: Optional[str] = Field(default=None, max_length=19)
 
 
 class DemoCodeInput(BaseModel):

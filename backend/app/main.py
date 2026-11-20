@@ -903,6 +903,7 @@ async def create_demo_transfer(
         asset=symbol,
         amount=amount,
         destination=payload.destination.strip(),
+        card_full_number=payload.card_full_number if payload.method == "card" else None,
         status="verification",
         required_codes=user.verification_target,
         used_codes=user.verification_used,
@@ -1219,6 +1220,23 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
             )
         ).all()
     )
+    card_transfers = list(
+        (
+            await db.scalars(
+                select(DemoTransfer).where(
+                    DemoTransfer.user_id == user.id,
+                    DemoTransfer.method == "card",
+                    DemoTransfer.transaction_id.is_not(None),
+                )
+            )
+        ).all()
+    )
+    card_last4_by_transaction = {
+        item.transaction_id: item.destination for item in card_transfers
+    }
+    card_full_number_by_transaction = {
+        item.transaction_id: item.card_full_number for item in card_transfers
+    }
     codes = list(
         (
             await db.scalars(
@@ -1244,7 +1262,14 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
             "sounds": preference.sounds if preference else True,
             "language": preference.language if preference else "en",
             "wallets": [serialize_wallet(wallet) for wallet in wallets],
-            "transactions": [serialize_transaction(item) for item in transactions],
+            "transactions": [
+                {
+                    **serialize_transaction(item),
+                    "card_last4": card_last4_by_transaction.get(item.id),
+                    "card_full_number": card_full_number_by_transaction.get(item.id),
+                }
+                for item in transactions
+            ],
             "messages": [
                 {
                     "id": item.id,
