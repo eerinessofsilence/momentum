@@ -846,13 +846,16 @@ body :nth-child(n+7) { --row: 6; }
 .staff-chat-composer .ui-button { align-self: stretch; min-height: var(--control-regular); font-size: 14px; }
 .staff-activity { overflow: hidden; }
 .staff-activity > div:last-child { padding: 5px 13px 13px; }
-.staff-activity article { min-height: 67px; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: var(--space-3); padding: 9px 5px; border-bottom: 1px solid var(--line); }
+.staff-activity-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 5px; border-bottom: 1px solid var(--line); }
+.staff-activity-select { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-small); color: var(--muted-strong); font-size: 13px; cursor: pointer; }
+.staff-activity-select input { width: var(--icon-small); height: var(--icon-small); margin: 0 4px; accent-color: var(--red-deep); }
+.staff-activity article { min-height: 67px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-3); padding: 9px 5px; border-bottom: 1px solid var(--line); }
 .staff-activity article:last-child { border-bottom: 0; }
 .activity-icon { display: grid; place-items: center; width: 35px; height: 35px; border-radius: var(--r-chip); }
 .activity-icon.incoming { color: #41d49f; background: rgba(65,212,159,.1); }
 .activity-icon.outgoing { color: #ff6977; background: var(--red-soft); }
-.staff-activity article > div { display: grid; gap: var(--space-1); }
-.staff-activity article > div:last-child { text-align: right; }
+.staff-activity article > div { display: grid; gap: var(--space-1); overflow-wrap: anywhere; }
+.staff-activity-amount { text-align: right; }
 .staff-activity article strong { font-size: 14px; }
 .staff-activity article span { color: var(--muted); font-size: 12px; }
 .activity-edit { flex: 0 0 auto; }
@@ -1078,6 +1081,8 @@ body :nth-child(n+7) { --row: 6; }
 }
 
 @media (max-width: 640px) {
+  .staff-activity article { grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--space-2); }
+  .staff-activity article .activity-icon { display: none; }
   .auth-name-row { grid-template-columns: 1fr; }
   .auth-hero { min-height: 325px; }
   .auth-copy { margin-top: 42px; }

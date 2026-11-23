@@ -1256,12 +1256,38 @@ function ClientChat({
 
 function ClientActivity({
   client,
-  onEditCredit
+  onEditCredit,
+  onHidden
 }: {
   client: StaffClient;
   onEditCredit: (transaction: Transaction) => void;
+  onHidden: (client: StaffClient) => void;
 }) {
   const { t } = useStaffI18n();
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const selectedIds = client.transactions.filter((item) => selected.has(item.id)).map((item) => item.id);
+  const allSelected = selectedIds.length > 0 && selectedIds.length === client.transactions.length;
+
+  const hideSelected = async () => {
+    if (!window.confirm(t("hideTransactionsConfirm", { count: selectedIds.length }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ client: StaffClient }>(`/staff/clients/${client.id}/transactions/hide`, {
+        method: "POST",
+        body: JSON.stringify({ transaction_ids: selectedIds })
+      });
+      setSelected(new Set());
+      onHidden(result.client);
+    } catch (err) {
+      setError(localizeStaffError((err as Error).message, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Card variant="nested" className="staff-section-card staff-activity">
       <CardHeader
@@ -1271,10 +1297,43 @@ function ClientActivity({
         trailing={<Badge>{client.transaction_count} {t("total")}</Badge>}
       />
       <div>
+        {client.transactions.length > 0 ? (
+          <div className="staff-activity-actions">
+            <label className="staff-activity-select">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(input) => { if (input) input.indeterminate = selectedIds.length > 0 && !allSelected; }}
+                disabled={busy}
+                onChange={(event) => setSelected(new Set(event.target.checked ? client.transactions.map((item) => item.id) : []))}
+              />
+              {t("selectAllTransactions")}
+            </label>
+            <Button variant="danger" size="small" disabled={busy || !selectedIds.length} onClick={hideSelected}>
+              <Trash size={16} /> {t("hideTransactions", { count: selectedIds.length })}
+            </Button>
+          </div>
+        ) : <EmptyState compact title={t("noTransactions")} />}
+        {error && <Notice variant="danger">{error}</Notice>}
         {client.transactions.map((item) => {
           const incoming = Number(item.amount) >= 0;
+          const amount = `${incoming ? "+" : "−"}${assetAmount(item.amount, item.asset)}`;
           return (
             <article key={item.id}>
+              <label className="staff-activity-select">
+                <input
+                  type="checkbox"
+                  aria-label={`${transactionTitle(item, t)} ${amount}`}
+                  checked={selected.has(item.id)}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const next = new Set(selected);
+                    if (event.target.checked) next.add(item.id);
+                    else next.delete(item.id);
+                    setSelected(next);
+                  }}
+                />
+              </label>
               <span className={`activity-icon ${incoming ? "incoming" : "outgoing"}`}>
                 {incoming ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
               </span>
@@ -1291,17 +1350,15 @@ function ClientActivity({
                   })}
                 </span>
               </div>
-              <div>
-                <strong>
-                  {incoming ? "+" : "−"}
-                  {assetAmount(item.amount, item.asset)}
-                </strong>
+              <div className="staff-activity-amount">
+                <strong>{amount}</strong>
                 <span>{money(item.usd_value)}</span>
               </div>
               {item.editable && (
                 <button
                   type="button"
                   className="icon-button activity-edit"
+                  disabled={busy}
                   onClick={() => onEditCredit(item)}
                   title={t("editCredit")}
                   aria-label={t("editCredit")}>
@@ -1666,7 +1723,15 @@ export function StaffPage() {
                     )}
                     {tab === "chat" && <ClientChat client={client} onRefresh={refreshAll} />}
                     {tab === "activity" && (
-                      <ClientActivity client={client} onEditCredit={setEditCredit} />
+                      <ClientActivity
+                        key={client.id}
+                        client={client}
+                        onEditCredit={setEditCredit}
+                        onHidden={(updated) => {
+                          setClient((current) => current?.id === updated.id ? updated : current);
+                          loadClients(query, page).catch((err) => setError(localizeStaffError((err as Error).message, t)));
+                        }}
+                      />
                     )}
                   </div>
                 </>

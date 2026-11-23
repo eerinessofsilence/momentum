@@ -468,6 +468,78 @@ def test_staff_can_set_wallet_balance_and_permanently_delete_client(client):
     assert rejected_login.status_code == 401
 
 
+def test_staff_can_hide_selected_or_all_transactions_without_changing_ledger(client, monkeypatch):
+    from datetime import timedelta
+
+    from app import main
+
+    client.post(
+        "/api/auth/login", json={"username": "moderator", "password": "MomentumAdmin123!"}
+    )
+    created = client.post(
+        "/api/staff/clients",
+        json={
+            "profile_label": "History Test",
+            "name": "History Test",
+            "username": "history_hide_test",
+            "email": "history.hide.test@example.com",
+        },
+    ).json()["client"]
+    base = f"/api/staff/clients/{created['id']}"
+    hide_url = f"{base}/transactions/hide"
+    for _ in range(31):
+        adjusted = client.post(f"{base}/balance", json={"asset": "USDT", "amount": "1"})
+        assert adjusted.status_code == 201
+    profile = adjusted.json()["client"]
+    assert len(profile["transactions"]) == profile["transaction_count"] == 31
+    selected_id = profile["transactions"][0]["id"]
+    selection = {"transaction_ids": [selected_id]}
+    snapshot_time = main.now() + timedelta(minutes=1)
+    monkeypatch.setattr(main, "now", lambda: snapshot_time)
+
+    client.post(f"{base}/impersonate")
+    before = client.get("/api/dashboard").json()
+    assert client.post(hide_url, json=selection).status_code == 403
+    client.post("/api/auth/impersonation/exit")
+
+    other = client.get("/api/staff/clients?query=mia").json()["items"][0]
+    foreign_url = f"/api/staff/clients/{other['id']}"
+    foreign = client.get(foreign_url).json()["client"]
+    foreign_id = foreign["transactions"][0]["id"]
+    assert client.post(hide_url, json={"transaction_ids": []}).status_code == 422
+    response = client.post(hide_url, json={"transaction_ids": [selected_id, foreign_id]})
+    visible = response.json()["client"]
+    assert visible["transactions"] == profile["transactions"][1:]
+    assert visible["transaction_count"] == 30
+    assert client.post(hide_url, json=selection).json()["client"] == visible
+    assert client.get(foreign_url).json()["client"]["transactions"] == foreign["transactions"]
+
+    client.post(f"{base}/impersonate")
+    after = client.get("/api/dashboard").json()
+    assert after["total_balance"] == before["total_balance"]
+    assert after["periods"] == before["periods"]
+    assert [item["id"] for item in after["transactions"]] == [
+        item["id"] for item in visible["transactions"][:5]
+    ]
+    assert [item["id"] for item in client.get("/api/transactions").json()["items"]] == [
+        item["id"] for item in visible["transactions"]
+    ]
+    client.post("/api/auth/impersonation/exit")
+
+    result = client.post(
+        hide_url, json={"transaction_ids": [item["id"] for item in visible["transactions"]]}
+    ).json()["client"]
+    assert result["transactions"] == []
+    assert result["transaction_count"] == 0
+    assert result["wallets"] == profile["wallets"]
+    listing = client.get("/api/staff/clients?query=history_hide_test").json()
+    assert listing["items"][0]["transaction_count"] == listing["summary"]["transactions"] == 0
+    client.post(f"{base}/impersonate")
+    assert client.get("/api/transactions").json()["items"] == []
+    assert client.get("/api/dashboard").json()["periods"] == before["periods"]
+    client.post("/api/auth/impersonation/exit")
+
+
 def test_managed_profile_and_persistent_multi_code_transfer(client):
     client.post(
         "/api/auth/login",

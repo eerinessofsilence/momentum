@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -91,6 +91,12 @@ class StaffBalanceInput(BaseModel):
 class StaffTransactionUpdateInput(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=28, decimal_places=8)
     effective_at: datetime
+
+
+class StaffTransactionHideInput(BaseModel):
+    transaction_ids: list[Annotated[int, Field(strict=True, gt=0, le=2_147_483_647)]] = Field(
+        min_length=1
+    )
 
 
 class StaffDepositDecisionInput(BaseModel):

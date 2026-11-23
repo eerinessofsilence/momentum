@@ -112,6 +112,7 @@ class Transaction(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     effective_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class DemoTransfer(Base):

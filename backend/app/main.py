@@ -23,7 +23,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import String, cast, delete, func, or_, select
+from sqlalchemy import String, cast, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +57,7 @@ from .schemas import (
     StaffCodeInput,
     StaffDepositDecisionInput,
     StaffProfileStatusInput,
+    StaffTransactionHideInput,
     StaffTransactionUpdateInput,
     StaffVerificationInput,
     SupportMessageInput,
@@ -621,7 +622,8 @@ async def dashboard(user: User = Depends(current_user), db: AsyncSession = Depen
             )
         ).all()
     )
-    recent_transactions = list(reversed(all_transactions[-5:]))
+    visible_transactions = [item for item in all_transactions if item.hidden_at is None]
+    recent_transactions = list(reversed(visible_transactions[-5:]))
     total = sum(
         (as_decimal(wallet.balance) * as_decimal(wallet.price_usd) for wallet in wallets),
         Decimal("0"),
@@ -662,7 +664,7 @@ async def transactions(
     items = (
         await db.scalars(
             select(Transaction)
-            .where(Transaction.user_id == user.id)
+            .where(Transaction.user_id == user.id, Transaction.hidden_at.is_(None))
             .order_by(Transaction.effective_at.desc(), Transaction.id.desc())
         )
     ).all()
@@ -1166,7 +1168,9 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         Decimal("0"),
     ).quantize(Decimal("0.01"))
     transaction_count = await db.scalar(
-        select(func.count()).select_from(Transaction).where(Transaction.user_id == user.id)
+        select(func.count())
+        .select_from(Transaction)
+        .where(Transaction.user_id == user.id, Transaction.hidden_at.is_(None))
     )
     last_message = await db.scalar(
         select(SupportMessage)
@@ -1214,9 +1218,8 @@ async def serialize_staff_client(db: AsyncSession, user: User, detailed: bool = 
         (
             await db.scalars(
                 select(Transaction)
-                .where(Transaction.user_id == user.id)
+                .where(Transaction.user_id == user.id, Transaction.hidden_at.is_(None))
                 .order_by(Transaction.effective_at.desc(), Transaction.id.desc())
-                .limit(30)
             )
         ).all()
     )
@@ -1430,7 +1433,11 @@ async def staff_update_manual_credit(
         raise HTTPException(status_code=404, detail="Client not found")
     transaction = await db.scalar(
         select(Transaction)
-        .where(Transaction.id == transaction_id, Transaction.user_id == client.id)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.user_id == client.id,
+            Transaction.hidden_at.is_(None),
+        )
         .with_for_update()
     )
     if not transaction:
@@ -1527,6 +1534,33 @@ async def staff_update_client_settings(
     return {"client": await serialize_staff_client(db, client, detailed=True)}
 
 
+@app.post("/api/staff/clients/{user_id}/transactions/hide")
+async def staff_hide_transactions(
+    user_id: int,
+    payload: StaffTransactionHideInput,
+    _: User = Depends(current_staff),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    client = await db.scalar(select(User).where(User.id == user_id, User.is_staff.is_(False)))
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    ids = sorted(set(payload.transaction_ids))
+    hidden_at = now()
+    for offset in range(0, len(ids), 500):
+        await db.execute(
+            update(Transaction)
+            .where(
+                Transaction.user_id == client.id,
+                Transaction.id.in_(ids[offset : offset + 500]),
+                Transaction.hidden_at.is_(None),
+            )
+            .values(hidden_at=hidden_at)
+        )
+    await db.commit()
+    return {"client": await serialize_staff_client(db, client, detailed=True)}
+
+
 @app.get("/api/staff/clients")
 async def staff_clients(
     query: str = "",
@@ -1570,6 +1604,7 @@ async def staff_clients(
             Transaction.user_id.label("user_id"),
             func.count(Transaction.id).label("transaction_count"),
         )
+        .where(Transaction.hidden_at.is_(None))
         .group_by(Transaction.user_id)
         .subquery()
     )
@@ -1616,7 +1651,7 @@ async def staff_clients(
         select(func.count(Transaction.id))
         .select_from(User)
         .join(Transaction, Transaction.user_id == User.id)
-        .where(*filters)
+        .where(*filters, Transaction.hidden_at.is_(None))
     )
     needs_reply = await db.scalar(
         select(func.count())
