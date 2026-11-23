@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +14,8 @@ class Settings(BaseSettings):
     price_refresh_enabled: bool = True
     price_refresh_interval_seconds: int = 60
     frontend_origin: str = "http://localhost:5173"
+    turnstile_secret_key: SecretStr | None = None
+    turnstile_expected_hostnames: str | None = None
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
 
     model_config = SettingsConfigDict(

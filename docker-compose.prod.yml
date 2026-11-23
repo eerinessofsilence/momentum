@@ -18,6 +18,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
+      args:
+        TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+        DEMO_MODE: ${DEMO_MODE:-false}
     restart: unless-stopped
     env_file:
       - .env

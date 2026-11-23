@@ -1,6 +1,8 @@
 .env
 .env.local
 .DS_Store
+._*
+backup_before_cleanup.sql
 node_modules/
 frontend/dist/
 frontend/.vite/

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
+import httpx
 from fastapi import (
     Cookie,
     Depends,
@@ -70,6 +71,7 @@ from .security import (
     make_temporary_password,
     token_hash,
     verify_password,
+    verify_turnstile_token,
 )
 from .seed import assign_client_number, provision_user, seed_demo_user, seed_staff_workspace
 
@@ -407,6 +409,37 @@ async def health() -> dict:
 async def register(
     payload: RegisterInput, response: Response, db: AsyncSession = Depends(get_db)
 ) -> dict:
+    if not settings.demo_mode:
+        secret_key = (
+            settings.turnstile_secret_key.get_secret_value().strip()
+            if settings.turnstile_secret_key
+            else ""
+        )
+        expected_hostnames = {
+            hostname.strip().lower().rstrip(".")
+            for hostname in (settings.turnstile_expected_hostnames or "").split(",")
+            if hostname.strip()
+        }
+        if not secret_key or not expected_hostnames:
+            raise HTTPException(
+                status_code=503, detail="Registration verification is not configured"
+            )
+        if not payload.turnstile_token:
+            raise HTTPException(status_code=400, detail="Registration verification failed")
+        try:
+            verified = await verify_turnstile_token(
+                payload.turnstile_token,
+                secret_key,
+                expected_hostnames,
+            )
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(
+                status_code=503,
+                detail="Registration verification is temporarily unavailable",
+            ) from None
+        if not verified:
+            raise HTTPException(status_code=400, detail="Registration verification failed")
+
     user = User(
         name=payload.name.strip(),
         username=payload.username.strip().lower(),

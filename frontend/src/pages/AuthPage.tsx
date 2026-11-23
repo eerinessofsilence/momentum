@@ -1,9 +1,10 @@
 import { Pulse as Activity, Clock as Clock3, Eye, EyeSlash, ShieldCheck } from "@phosphor-icons/react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { localizeClientError, useClientI18n } from "../clientI18n";
 import { Brand } from "../components/Brand";
 import { HalftoneReveal } from "../components/HalftoneReveal";
+import { Turnstile } from "../components/Turnstile";
 import { Button, Field, Input, Notice, Tabs } from "../components/UI";
 import { navigate } from "../router";
 
@@ -18,6 +19,24 @@ export function AuthPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaError, setCaptchaError] = useState(false);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? "";
+  const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+  const captchaRequired = mode === "register" && !demoMode;
+  const onCaptchaToken = useCallback((token: string) => {
+    setCaptchaToken(token);
+    setCaptchaError(false);
+  }, []);
+  const onCaptchaError = useCallback(() => setCaptchaError(true), []);
+
+  const changeMode = (nextMode: "login" | "register") => {
+    setMode(nextMode);
+    setError("");
+    setCaptchaToken("");
+    setCaptchaError(false);
+  };
 
   useEffect(() => {
     if (user) navigate(user.is_staff ? "/staff" : "/app/overview", true);
@@ -29,10 +48,21 @@ export function AuthPage() {
     setError("");
     try {
       if (mode === "login") await login(username, password);
-      else await register({ name, username, email, password });
+      else await register({
+        name,
+        username,
+        email,
+        password,
+        turnstile_token: captchaRequired ? captchaToken : undefined,
+      });
       // The auth state effect sends staff and clients to their respective workspace.
     } catch (err) {
       setError(localizeClientError((err as Error).message, locale));
+      if (captchaRequired) {
+        setCaptchaToken("");
+        setCaptchaError(false);
+        setCaptchaReset((count) => count + 1);
+      }
     } finally {
       setBusy(false);
     }
@@ -84,8 +114,7 @@ export function AuthPage() {
             ariaLabel={t("authMode")}
             value={mode}
             onChange={(nextMode) => {
-              setMode(nextMode);
-              setError("");
+              changeMode(nextMode);
             }}
             items={[
               { value: "login", label: t("signIn") },
@@ -162,8 +191,29 @@ export function AuthPage() {
               </div>
               {mode === "register" && <small className="auth-password-hint">{t("passwordRule")}</small>}
             </Field>
+            {captchaRequired && (
+              turnstileSiteKey ? (
+                <div className="auth-turnstile" aria-label={t("securityCheck")}>
+                  <Turnstile
+                    key={captchaReset}
+                    siteKey={turnstileSiteKey}
+                    onToken={onCaptchaToken}
+                    onError={onCaptchaError}
+                  />
+                  {captchaError && <Notice variant="danger">{t("captchaLoadError")}</Notice>}
+                </div>
+              ) : (
+                <Notice variant="danger">{t("captchaSetupError")}</Notice>
+              )
+            )}
             {error && <Notice variant="danger">{error}</Notice>}
-            <Button type="submit" variant="primary" size="large" className="auth-submit" disabled={busy}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="large"
+              className="auth-submit"
+              disabled={busy || (captchaRequired && (!turnstileSiteKey || !captchaToken || captchaError))}
+            >
               {busy ? t("waiting") : mode === "login" ? t("signIn") : t("createWalletButton")}
             </Button>
             </form>
@@ -174,8 +224,7 @@ export function AuthPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setMode("register");
-                    setError("");
+                    changeMode("register");
                   }}>
                   {t("createAccount")}
                 </button>
@@ -186,8 +235,7 @@ export function AuthPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setMode("login");
-                    setError("");
+                    changeMode("login");
                   }}>
                   {t("signIn")}
                 </button>

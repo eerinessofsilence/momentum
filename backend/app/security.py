@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import hashlib
 import secrets
 import string
 
+import httpx
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
@@ -41,3 +44,24 @@ def make_temporary_password(length: int = 18) -> str:
 
 def token_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+async def verify_turnstile_token(
+    token: str, secret_key: str, expected_hostnames: set[str]
+) -> bool:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data={"secret": secret_key, "response": token},
+        )
+        response.raise_for_status()
+        result = response.json()
+
+    if not isinstance(result, dict):
+        return False
+    hostname = str(result.get("hostname", "")).lower().rstrip(".")
+    return (
+        result.get("success") is True
+        and result.get("action") == "register"
+        and hostname in expected_hostnames
+    )

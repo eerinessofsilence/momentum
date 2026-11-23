@@ -1,6 +1,8 @@
 .git
 .env
 .env.local
+**/._*
+backup_before_cleanup.sql
 **/node_modules
 **/dist
 **/.vite

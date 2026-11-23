@@ -50,7 +50,11 @@ nano .env
 Set a real `POSTGRES_PASSWORD` and `FRONTEND_ORIGIN` (use
 `https://<your-vps-ip>` for now). Leave
 `DEMO_MODE=false` — the demo build shows OTP codes directly in the UI,
-which you don't want for real users.
+which you don't want for real users. Create a Cloudflare Turnstile widget for
+your hostname and set its site key, secret key, and expected hostname as
+`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and
+`TURNSTILE_EXPECTED_HOSTNAMES` in `.env` (comma-separated when both the apex
+and `www` hostnames serve the app).
 
 ## 6. Build and start the app
 
@@ -76,17 +80,26 @@ sudo ./deploy/gen-self-signed-cert.sh
 Install the reverse proxy config:
 
 ```bash
+sudo cp deploy/nginx-rate-limit.conf /etc/nginx/conf.d/momentum-rate-limit.conf
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/momentum
 sudo ln -s /etc/nginx/sites-available/momentum /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+Registration is limited to two requests per minute per client IP, with a
+three-request burst. Turnstile tokens are also verified by the API before an
+account is created.
+
 ## 8. Verify
 
 Visit `https://<your-vps-ip>` — your browser will warn about the
 self-signed cert (expected, click through). Log in with the demo account
 from the main README, or register a real one.
+
+With `DEMO_MODE=false`, open the registration form on an allowed hostname and
+complete Turnstile. Changing `TURNSTILE_SITE_KEY` requires rebuilding the API
+image because Vite embeds the public site key in the frontend bundle.
 
 ## Updating after a new commit
 

@@ -3,7 +3,13 @@ import { api, ApiError } from './api'
 import { ClientI18nProvider, translateClient } from './clientI18n'
 import type { ClientLocale, Theme, User } from './types'
 
-type RegisterPayload = { name: string; username: string; email: string; password: string }
+type RegisterPayload = {
+  name: string
+  username: string
+  email: string
+  password: string
+  turnstile_token?: string
+}
 export type AccountSettingsPayload = {
   name: string
   username: string

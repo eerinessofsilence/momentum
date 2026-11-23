@@ -232,6 +232,7 @@ h1, h2, h3, .font-heading { font-family: Manrope, sans-serif; font-weight: 500; 
 .password-toggle { position: absolute; top: 50%; right: var(--space-2); width: var(--control-small); height: var(--control-small); display: grid; place-items: center; transform: translateY(-50%); border: 0; border-radius: var(--r-control-sm); background: transparent; color: var(--muted); cursor: pointer; }
 .password-toggle:hover { color: var(--text); background: var(--panel-soft); }
 .auth-password-hint { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.auth-turnstile { min-height: 65px; }
 input[type="number"] { appearance: textfield; }
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }

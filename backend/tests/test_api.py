@@ -1,3 +1,9 @@
+from unittest.mock import AsyncMock
+
+import httpx
+from pydantic import SecretStr
+
+
 def test_health_and_route_protection(client):
     assert client.get("/api/health").json() == {"status": "ok", "mode": "development"}
     client.post("/api/auth/logout")
@@ -94,6 +100,66 @@ def test_register_unique_user_and_preferences(client):
     assert client.patch("/api/account/settings", json=invalid_name).status_code == 422
     duplicate_email = {**settings_payload, "email": "mia.warren@example.com"}
     assert client.patch("/api/account/settings", json=duplicate_email).status_code == 409
+
+
+def test_register_requires_a_valid_turnstile_token_outside_demo_mode(client, monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main.settings, "demo_mode", False)
+    monkeypatch.setattr(main.settings, "turnstile_secret_key", None)
+    monkeypatch.setattr(
+        main.settings,
+        "turnstile_expected_hostnames",
+        "momentum-wallet.com,www.momentum-wallet.com",
+    )
+    verify = AsyncMock(return_value=False)
+    monkeypatch.setattr(main, "verify_turnstile_token", verify)
+    payload = {
+        "name": "Challenge Test",
+        "username": "challenge_test",
+        "email": "challenge_test@example.com",
+        "password": "A-secure-password-123",
+        "turnstile_token": "invalid-token",
+    }
+
+    unconfigured = client.post("/api/auth/register", json=payload)
+    assert unconfigured.status_code == 503
+    verify.assert_not_awaited()
+
+    monkeypatch.setattr(main.settings, "turnstile_secret_key", SecretStr("test-secret"))
+    response = client.post("/api/auth/register", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Registration verification failed"
+    verify.assert_awaited_once()
+
+
+async def test_turnstile_token_must_match_success_action_and_hostname(monkeypatch):
+    from app import security
+
+    results = [
+        {"success": True, "action": "register", "hostname": "momentum-wallet.com"},
+        {"success": False, "action": "register", "hostname": "momentum-wallet.com"},
+        {"success": True, "action": "login", "hostname": "momentum-wallet.com"},
+        {"success": True, "action": "register", "hostname": "other.example"},
+    ]
+
+    def handler(request):
+        assert request.url.path == "/turnstile/v0/siteverify"
+        return httpx.Response(200, json=results.pop(0))
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        security.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_async_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    allowed_hosts = {"momentum-wallet.com", "www.momentum-wallet.com"}
+
+    assert await security.verify_turnstile_token("valid-token", "secret", allowed_hosts)
+    assert not await security.verify_turnstile_token("bad-token", "secret", allowed_hosts)
+    assert not await security.verify_turnstile_token("wrong-action", "secret", allowed_hosts)
+    assert not await security.verify_turnstile_token("wrong-host", "secret", allowed_hosts)
 
 
 def test_support_is_persisted(authenticated_client):

@@ -12,6 +12,7 @@ class RegisterInput(BaseModel):
     username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_]+$")
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    turnstile_token: Optional[str] = Field(default=None, max_length=2048)
 
 
 class LoginInput(BaseModel):
